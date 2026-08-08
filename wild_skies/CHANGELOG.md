@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.2
+
+- Update checks now come from the mod's official mirror repo
+  (shanehudson-gen1recomp-mods/wild_skies). No gameplay changes.
+
 ## 1.4.1
 
 - Walking under a rooftop bird no longer scares it off; it only moves

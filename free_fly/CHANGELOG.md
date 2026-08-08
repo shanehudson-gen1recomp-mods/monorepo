@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.2
+
+- Update checks now come from the mod's official mirror repo
+  (shanehudson-gen1recomp-mods/free_fly). No gameplay changes.
+
 ## 1.4.0
 
 - FREEFLY no longer vanishes from the party menu when another mod (a
