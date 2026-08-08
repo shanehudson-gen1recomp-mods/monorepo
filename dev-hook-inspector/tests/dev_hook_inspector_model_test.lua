@@ -72,13 +72,51 @@ T.check(selfHooks.inspect.doc ~= nil
   "documented from the comment above it")
 
 -- the START menu wrap inserts HOOKS before QUIT
+local pushed = {}
+local game = { stack = { push = function(_, screen)
+  pushed[#pushed + 1] = screen
+end } }
 local items = { { label = "POKéMON" }, { label = "QUIT" } }
 local out = run.loader.hooks:call("ui.start_menu.items",
-  function(_, rows) return rows end, { stub = true }, items)
+  function(_, rows) return rows end, game, items)
 local at = {}
 for i, item in ipairs(out) do at[item.label] = i end
 T.check(at.HOOKS ~= nil, "HOOKS row added")
 T.check(at.HOOKS < at.QUIT, "and sits before QUIT")
+
+-- walking the menus: HOOKS opens the mod list, a mod opens its hooks,
+-- and picking a hook logs the detail line to the console
+out[at.HOOKS].onSelect()
+local modList = pushed[#pushed]
+T.check(modList ~= nil and modList.items ~= nil, "HOOKS opens the mod list")
+local fxRow
+for _, row in ipairs(modList.items) do
+  if row.m and row.m.id == "hook_fixture" then fxRow = row end
+end
+T.check(fxRow ~= nil, "fixture mod has a row")
+modList.onChoose(fxRow, modList)
+local hookList = pushed[#pushed]
+T.check(hookList ~= modList and hookList.items ~= nil,
+  "a mod opens its hook list")
+local hookRow
+for _, row in ipairs(hookList.items) do
+  if row.hook and row.hook.name == "documented" then hookRow = row end
+end
+T.check(hookRow ~= nil, "the documented export has a row")
+local Logger = require("src.core.Logger")
+local before = #Logger.history
+hookList.onChoose(hookRow, hookList)
+T.check(#Logger.history > before, "picking a hook logs to the console")
+local logged
+for i = before + 1, #Logger.history do
+  local line = Logger.history[i]
+  if line:find("hook_fixture.documented", 1, true)
+     and line:find("A documented export.", 1, true) then
+    logged = line
+  end
+end
+T.check(logged ~= nil, "the console line carries the full name and doc")
+T.check(pushed[#pushed] ~= hookList, "and the detail box is pushed")
 
 run.release()
 T.finish("dev-hook-inspector model")
