@@ -64,19 +64,20 @@ $listing"
   # and the family points at nothing here.
   if is_unlisted "$mod"; then family=""; fi
 
-  # The manifest description is the one-line what; an optional tracked
-  # MIRROR.md in the mod's directory carries the longer what-and-why.
-  blurb=""
+  # What the mod is: the manifest description, or the longer
+  # what-and-why from a tracked MIRROR.md in the mod's directory when
+  # one exists.
+  about="$(desc_of "$mod")"
   if git -C "$ROOT" ls-files --error-unmatch "$mod/MIRROR.md" >/dev/null 2>&1; then
-    blurb=$'\n'"$(cat "$ROOT/$mod/MIRROR.md")"$'\n'
+    about="$(cat "$ROOT/$mod/MIRROR.md")"
   fi
 
   readme="# $mod (Official mirror)
 
 Installable releases of the **$(name_of "$mod")** mod for [gen1recomp](https://github.com/bryanthaboi/gen1recomp).
 
-$(desc_of "$mod")
-$demo$blurb
+$about
+$demo
 Grab the newest \`.zip\` from [Releases](https://github.com/$ORG/$mod/releases) and install it in-game: **MODS > Import mod .zip**. Installed copies get update checks through the launcher automatically.
 
 Source code and issues live in the [mods monorepo](https://github.com/$ORG/monorepo); this repo only hosts releases.
