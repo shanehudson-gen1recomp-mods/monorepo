@@ -1,0 +1,16 @@
+{
+  "id": "dev-hook-inspector",
+  "name": "Dev Hook Inspector",
+  "version": "0.1.0",
+  "entry": "main.lua",
+  "api": 2,
+  "category": "OTHER",
+  "priority": 900,
+  "dependencies": [],
+  "optional_dependencies": [],
+  "conflicts": [],
+  "permissions": ["engine_internals"],
+  "game_version": "0.0.0-dev || >=0.1.0 <2.0.0",
+  "description": "Developer tool: a HOOKS entry on the START menu lists every installed mod's public exports and events.",
+  "github": "shanehudson-gen1recomp-mods/dev-hook-inspector"
+}

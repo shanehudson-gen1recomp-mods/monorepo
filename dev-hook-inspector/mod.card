@@ -1,0 +1,17 @@
+return {
+  summary   = "Browse every installed mod's public exports and events from the START menu.",
+  author    = "Shane Hudson",
+  tags      = { "developer", "tool", "menu" },
+  differences = {
+    changed = {
+      "START menu gains a HOOKS entry (before QUIT)",
+    },
+    added = {},
+    known = {
+      "a hook's description is the comment above its definition; none there means none shown",
+      "events with dynamically built names only appear after they first fire",
+    },
+  },
+  credits = {},
+  compat  = { engine = "0.0.0-dev || >=0.1.0 <2.0.0", modApi = 2 },
+}
