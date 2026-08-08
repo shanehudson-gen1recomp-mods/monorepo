@@ -5,7 +5,7 @@ off anywhere outdoors, fly over trees, water, fences and rooftops, cross
 into neighbouring routes (the sea included), and press the B button (X on
 keyboard) over open ground to land. That's the whole mod: free flight, no dependencies.
 
-[![Demo](https://raw.githubusercontent.com/shanehudson-gen1recomp-mods/gen1recomp-mods/main/.github/free_fly-demo.gif)](https://www.loom.com/share/5867c264456040c8a37acc7e32f4c827)
+[![Demo](https://raw.githubusercontent.com/shanehudson-gen1recomp-mods/monorepo/main/.github/free_fly-demo.gif)](https://www.loom.com/share/5867c264456040c8a37acc7e32f4c827)
 
 *Click through for the demo video.*
 

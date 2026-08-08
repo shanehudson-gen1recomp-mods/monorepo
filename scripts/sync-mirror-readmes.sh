@@ -37,7 +37,7 @@ Installable releases of the **$(name_of "$mod")** mod for [gen1recomp](https://g
 
 Grab the newest \`.zip\` from [Releases](https://github.com/$ORG/$mod/releases) and install it in-game: **MODS > Import mod .zip**. Installed copies get update checks through the launcher automatically.
 
-Source code and issues live in the [mods monorepo](https://github.com/$ORG/gen1recomp-mods); this repo only hosts releases.
+Source code and issues live in the [mods monorepo](https://github.com/$ORG/monorepo); this repo only hosts releases.
 
 ## All mods in this family
 
@@ -72,7 +72,7 @@ profile="# gen1recomp mods
 Mods for [gen1recomp](https://github.com/bryanthaboi/gen1recomp). Each mod's repo here is its official mirror: grab the newest \`.zip\` from its Releases and install it in-game via **MODS > Import mod .zip**. Installed mods get update checks through the launcher automatically.
 
 $listing
-Development happens in the [mods monorepo](https://github.com/$ORG/gen1recomp-mods); the per-mod repos only host releases."
+Development happens in the [mods monorepo](https://github.com/$ORG/monorepo); the per-mod repos only host releases."
 
 current="$(gh api "repos/$ORG/.github/contents/profile/README.md" --jq .content 2>/dev/null \
   | python3 -c "import sys,base64;sys.stdout.write(base64.b64decode(sys.stdin.read()).decode())" \

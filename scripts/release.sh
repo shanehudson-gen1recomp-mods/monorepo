@@ -47,7 +47,7 @@ for mod in "${mods[@]}"; do
 
   notes="Download the .zip and install it from the game: MODS > Import mod .zip. Installed copies pick up new releases through the game's mod manager.
 
-Source: https://github.com/$ORG/gen1recomp-mods (development happens in the monorepo; this repo hosts releases)."
+Source: https://github.com/$ORG/monorepo (development happens in the monorepo; this repo hosts releases)."
   if [ -n "$changes" ]; then
     notes+=$'\n\n## Changes\n\n'"$changes"
   fi
