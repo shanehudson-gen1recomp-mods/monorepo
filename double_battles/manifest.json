@@ -1,7 +1,7 @@
 {
   "id": "double_battles",
   "name": "Double Battles",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "entry": "main.lua",
   "api": 2,
   "category": "MECHANIC",

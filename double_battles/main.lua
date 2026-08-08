@@ -1348,7 +1348,8 @@ return function(mod)
       end
       if self.phase == "db_switch_target" then
         local input = self.game.input
-        if input:wasPressed("left") or input:wasPressed("right") then
+        if input:wasPressed("left") or input:wasPressed("right")
+           or input:wasPressed("up") or input:wasPressed("down") then
           self:__dbSwitchAimAt(self.player2)
         elseif input:wasPressed("a") then
           self:__dbSwitchConfirm()
@@ -1365,7 +1366,8 @@ return function(mod)
         return origUpdate(self, dt)
       end
       local input = self.game.input
-      if input:wasPressed("left") or input:wasPressed("right") then
+      if input:wasPressed("left") or input:wasPressed("right")
+         or input:wasPressed("up") or input:wasPressed("down") then
         self:__dbAimAt(self.enemy2)
       elseif input:wasPressed("a") then
         if self.__dbPendingBall then
@@ -1507,21 +1509,45 @@ return function(mod)
 
   -- classic 160px tucks the partners inside the frame; wide 304px has
   -- honest room in each side's region
+  -- the target menu: a vanilla-style box in the text area naming both
+  -- candidates, cursor on the aimed one.  Anchored to the right edge
+  -- like the FIGHT menu, in classic, wide and 3D alike (the classic UI
+  -- canvas rides into the 3D letterbox, so the box lands where every
+  -- other battle menu does there).
+  local function drawAimMenu(battle, first, second, aimed)
+    pcall(function()
+      if (first.dbAnchor or 1) == 2 then first, second = second, first end
+      local Font = require("src.render.Font")
+      local bx = math.floor((battle.wideRegion and 304 or 160) / 8) - 12
+      Font.drawBox(bx, 12, 12, 6)
+      love.graphics.setColor(0, 0, 0, 1)
+      for i, b in ipairs({ first, second }) do
+        local rowY = 96 + i * 16 - 8
+        Font.draw(b.name or "?", bx * 8 + 16, rowY)
+        if b == aimed then Font.drawCode(0xED, bx * 8 + 8, rowY) end
+      end
+      love.graphics.setColor(1, 1, 1, 1)
+    end)
+  end
+
   mod.hooks:wrap("battle.overlay", function(next, battle)
     next(battle)
     if type(battle) ~= "table" or not battle.__double then return end
-    -- partners draw in the pics layer; the overlay only carries the
-    -- blinking aim frame, placed by the target's sticky anchor.  The
-    -- vanilla HUD box follows the aim (drawHUDs borrow), so the frame
-    -- marks the sprite and the box names it.  A scene owner draws its
-    -- own cue in its own space, so the classic-coords frame stands down.
-    if sceneActive(battle) then return end
+    -- the sprite frames are 2D-only (a scene owner stages the mons in
+    -- its own space); the name menu draws everywhere.  The vanilla HUD
+    -- box follows the aim too (drawHUDs borrow), so the frame marks
+    -- the sprite, the box shows its health, and the menu names both.
+    local scene = sceneActive(battle)
     if battle.phase == "db_target" then
+      local aimed = battle.__dbAimBattler or battle.enemy
+      if battle.enemy and battle.enemy2 then
+        drawAimMenu(battle, battle.enemy, battle.enemy2, aimed)
+      end
       -- the aimed foe holds the lead slot while the prompt is up; the
       -- frame still lands on its sprite because foeRect keys off the
       -- battler's own sticky anchor, not the slot
-      local aimed = battle.__dbAimBattler or battle.enemy
-      if aimed and math.floor(love.timer.getTime() * 4) % 2 == 0 then
+      if not scene and aimed
+         and math.floor(love.timer.getTime() * 4) % 2 == 0 then
         local tx, ty, tw = foeRect(battle, aimed)
         love.graphics.setColor(1, 0.2, 0.2, 1)
         love.graphics.rectangle("line", tx, ty, tw, tw)
@@ -1529,10 +1555,14 @@ return function(mod)
       end
     end
     if battle.phase == "db_switch_target" then
+      local aimed = battle.__dbSwitchAim or battle.player
+      if battle.player and battle.player2 then
+        drawAimMenu(battle, battle.player, battle.player2, aimed)
+      end
       -- same cue on your own side: the frame marks the mon about to
       -- step back for the bench pick
-      local aimed = battle.__dbSwitchAim or battle.player
-      if aimed and math.floor(love.timer.getTime() * 4) % 2 == 0 then
+      if not scene and aimed
+         and math.floor(love.timer.getTime() * 4) % 2 == 0 then
         local tx, ty, tw = allyRect(battle, aimed)
         love.graphics.setColor(0.2, 1, 0.4, 1)
         love.graphics.rectangle("line", tx, ty, tw, tw)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2
+
+- The target prompts grew a menu: a vanilla-style box in the text
+  area names both candidates (both foes when aiming a move or ball,
+  both of yours when picking who steps back for a switch), with the
+  cursor on the current aim. UP/DOWN move the cursor alongside
+  LEFT/RIGHT. The box sits where the FIGHT menu does, in the classic,
+  wide and 3D layouts alike.
+
 ## 0.2.1
 
 - Aimed ball throws: a ball with two wild Pokémon out now opens the
