@@ -1267,21 +1267,73 @@ return function(mod)
         self:partnerResidual(self.enemy2)
         self:partnerResidual(self.player2)
       end
-      -- a recall that never executed (a failed RUN took the turn) and
-      -- the withdrawn-body map both expire at the turn boundary
+      -- a recall that never executed (a failed RUN took the turn), the
+      -- withdrawn-body map and a ball throw's animation shift all
+      -- expire at the turn boundary
       self.__dbForcedB = nil
       self.__dbReplaced = nil
+      self.__dbAnimShift = nil
     end
 
-    -- no aiming a ball with two wild Pokémon up: the throw wastes the
-    -- ball with zero shakes, gen 1's own trainer-ball precedent
+    -- a ball with two wild Pokémon up is aimed like a move: the throw
+    -- defers into the db_target prompt, and the confirm COMMITS the aim
+    -- swap so the whole vanilla catch pipeline (rate, shakes, the
+    -- caught-mon storage, the miss free move) reads the aimed foe from
+    -- the lead slot.  Paths that reach catchAttempt without the prompt
+    -- (a mod calling it directly) keep the old refusal.
     local origCatch = battle.catchAttempt
     battle.catchAttempt = function(self, ball, rateOverride)
-      if self.kind == "wild" and alive(self.enemy2) then
+      if self.kind == "wild" and alive(self.enemy2)
+         and not self.__dbBallAimed then
         self:sayNext(Strings("No aiming with\ntwo POKéMON out!"))
         return false, 0
       end
+      self.__dbBallAimed = nil
       return origCatch(self, ball, rateOverride)
+    end
+
+    local origThrow = battle.throwBall
+    if type(origThrow) == "function" then
+      battle.throwBall = function(self, ball)
+        if self.kind ~= "wild"
+           or not (alive(self.enemy) and alive(self.enemy2)) then
+          return origThrow(self, ball)
+        end
+        self.__dbPendingBall = ball
+        self:__dbAimAt(self.enemy)
+        self.phase = "db_target"
+      end
+    end
+
+    battle.__dbBallConfirm = function(self)
+      local ball = self.__dbPendingBall
+      self.__dbPendingBall = nil
+      if not ball then return end
+      -- commit, don't reset: everything the throw queues (including
+      -- the caught-mon storage) reads the lead slot at run time
+      self.__dbAimSwapped = nil
+      self.__dbAimBattler = nil
+      self.__dbBallAimed = true
+      -- the toss animation is authored on the vanilla slot; carry it
+      -- to wherever the aimed foe actually stands
+      self.__dbAnimShift = self:__dbShiftFor(nil, self.enemy)
+      self.phase = "messages"
+      self.afterQueue = "menu"
+      origThrow(self, ball)
+    end
+    battle.__dbBallCancel = function(self)
+      local ball = self.__dbPendingBall
+      self.__dbPendingBall = nil
+      self:__dbAimReset()
+      -- the bag consumed the ball before the throw deferred; backing
+      -- out hands it back
+      if ball then
+        pcall(function()
+          require("src.inventory.Bag").add(self.game.save, ball, 1,
+                                           self.data)
+        end)
+      end
+      self.phase = "menu"
     end
 
     -- the db_target phase: LEFT/RIGHT swap foes, A locks in, B backs
@@ -1316,6 +1368,10 @@ return function(mod)
       if input:wasPressed("left") or input:wasPressed("right") then
         self:__dbAimAt(self.enemy2)
       elseif input:wasPressed("a") then
+        if self.__dbPendingBall then
+          self:__dbBallConfirm()
+          return
+        end
         local t = self.__dbAimBattler or self.enemy
         if not alive(t) then
           t = alive(self.enemy) and self.enemy or self.enemy2
@@ -1326,6 +1382,10 @@ return function(mod)
         self.__dbPending = nil
         self:resolveTurn(action)
       elseif input:wasPressed("b") then
+        if self.__dbPendingBall then
+          self:__dbBallCancel()
+          return
+        end
         self:__dbAimReset()
         self.__dbPending = nil
         self.phase = "moveSelect"
@@ -1530,6 +1590,10 @@ return function(mod)
     end
     if not hitB then return next(game, ev) end
     if hitB == st.__dbAimBattler then
+      if st.__dbPendingBall then
+        st:__dbBallConfirm()
+        return true
+      end
       st:__dbAimReset()
       st.__dbTarget = hitB
       local action = st.__dbPending

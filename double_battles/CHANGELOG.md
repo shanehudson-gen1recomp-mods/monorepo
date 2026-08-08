@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1
+
+- Aimed ball throws: a ball with two wild Pokémon out now opens the
+  target prompt instead of wasting the throw. LEFT/RIGHT (or a click)
+  aims, A throws at that Pokémon through the vanilla catch pipeline
+  (its real catch rate, shakes and storage), B backs out and returns
+  the ball to the bag. The toss animation follows the aim. Catching
+  one Pokémon ends the battle and the other flees. Direct
+  catchAttempt calls that skip the prompt keep the old refusal.
+
 ## 0.2.0
 
 - 3D doubles: Dramatic Shape's battle modes now stage both Pokémon on

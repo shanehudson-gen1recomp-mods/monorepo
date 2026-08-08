@@ -23,9 +23,9 @@ as a normal 1v1, so catching and running work as usual from there.
 
 When you pick a move with both foes up, a target prompt follows: LEFT
 and RIGHT swap between the two (a blinking frame shows your aim), A
-locks it in, B goes back to the move menu. Throwing a ball with two
-wild Pokémon out wastes the ball, like a trainer battle does; knock one
-out first.
+locks it in, B goes back to the move menu. Throwing a ball opens the
+same prompt: aim at the Pokémon you want, A throws, B puts the ball
+back in the bag. Catching one ends the battle and the other flees.
 
 While aiming, the target's name, level and health show alongside the
 blinking frame, and move animations follow your aim to the right
