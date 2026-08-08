@@ -1,8 +1,8 @@
 # gen1recomp-mods
 
 Two mods for [gen1recomp](https://github.com/bryanthaboi/gen1recomp)
-that put Pokémon in the sky. They work alone, but they're built to be
-used together.
+that put Pokémon in the sky, plus a developer tool. The sky mods work
+alone, but they're built to be used together.
 
 <p>
 <a href="https://www.loom.com/share/5867c264456040c8a37acc7e32f4c827"><img src=".github/free_fly-demo.gif" width="49%" alt="free_fly demo"></a>
@@ -34,6 +34,12 @@ species and level it spawned with. Both also play well with the
 (roamers on the ground, birds in the air, no crossed wires). Details and
 tested versions are in each mod's README.
 
+**[dev-hook-inspector](dev-hook-inspector/)** (dev tool): adds a HOOKS
+entry to the START menu that lists every installed mod's public
+exports and events, with descriptions read from the comments in their
+source and each pick echoed to the console. For mod authors wiring
+mods together; regular players don't need it.
+
 ## Install
 
 Always download a mod from its own official mirror below. The mirror is
@@ -45,6 +51,7 @@ updating. Each release ships one `<mod>-<version>.zip`; grab the newest.
 | --- | --- | --- |
 | Free Fly | [`free_fly`](https://github.com/shanehudson-gen1recomp-mods/free_fly) | [Releases](https://github.com/shanehudson-gen1recomp-mods/free_fly/releases/latest) |
 | Wild Skies | [`wild_skies`](https://github.com/shanehudson-gen1recomp-mods/wild_skies) | [Releases](https://github.com/shanehudson-gen1recomp-mods/wild_skies/releases/latest) |
+| Dev Hook Inspector (dev tool) | [`dev-hook-inspector`](https://github.com/shanehudson-gen1recomp-mods/dev-hook-inspector) | [Releases](https://github.com/shanehudson-gen1recomp-mods/dev-hook-inspector/releases/latest) |
 
 Then, in the game:
 
