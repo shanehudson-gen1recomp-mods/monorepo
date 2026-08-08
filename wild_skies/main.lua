@@ -100,6 +100,7 @@ return function(mod)
 
   local flyers = {}
   local battleRest = 0
+  local summonFail -- forward: every summon ends in exactly one event
   local cooldown = 3
   local serial = 0
   local picksCache = { key = nil, picks = nil, ambient = false }
@@ -114,7 +115,9 @@ return function(mod)
 
   local function clearAll(ow)
     for i = #flyers, 1, -1 do
-      detach(ow, flyers[i])
+      local f = flyers[i]
+      if f.summonId and summonFail then summonFail(f, "map changed") end
+      detach(ow, f)
       table.remove(flyers, i)
     end
   end
@@ -131,7 +134,7 @@ return function(mod)
     if battleRest > 0 then return nil end
     radius = radius or 1
     for _, f in ipairs(flyers) do
-      if not f.dead and f.bold and f.t >= 0.75
+      if not f.dead and f.bold and f.t >= 0.75 and not f.summonId
          and math.abs(f.cellX - cellX) + math.abs(f.cellY - cellY) <= radius then
         return f
       end
@@ -171,6 +174,49 @@ return function(mod)
     return { species = f.species, level = f.level }
   end
 
+  -- call a bird down: the nearest bold flyer within radius breaks off,
+  -- flies hard to the cell, and is consumed on arrival with the
+  -- mod.wild_skies.flyer_summoned event ({summonId, species, level,
+  -- cellX, cellY}).  Every other ending (too slow, map change, lost)
+  -- emits mod.wild_skies.summon_failed ({summonId, reason}) instead, so
+  -- a caller deferring work on the summon always hears back exactly
+  -- once.  Returns the summonId, or nil and a reason.
+  local summonSerial = 0
+  mod.exports.summonFlyer = function(cellX, cellY, opts)
+    opts = opts or {}
+    if battleRest > 0 then return nil, "resting" end
+    local radius = opts.radius or 8
+    local best, bestD
+    for _, f in ipairs(flyers) do
+      if not f.dead and f.bold and f.t >= 0.75 and not f.summonId then
+        local d = math.abs(f.cellX - cellX) + math.abs(f.cellY - cellY)
+        if d <= radius and (not bestD or d < bestD) then
+          best, bestD = f, d
+        end
+      end
+    end
+    if not best then return nil, "nobody near" end
+    summonSerial = summonSerial + 1
+    local id = "summon_" .. summonSerial
+    best.summonId = id
+    best.mode = "summon"
+    best.summonX, best.summonY = cellX * 16, cellY * 16
+    best.summonBy = best.t + 4
+    best.altTarget = 10
+    return id
+  end
+
+  summonFail = function(f, reason)
+    local sid = f.summonId
+    if not sid then return end
+    f.summonId = nil
+    if f.mode == "summon" then f.mode = "roam" end
+    pcall(function()
+      mod.events:emit("mod.wild_skies.summon_failed",
+                      { summonId = sid, reason = reason })
+    end)
+  end
+
   -- a classic step encounter that rolls a species with a lookalike near
   -- the player IS that bird as far as anyone can tell, so the roll
   -- consumes it: the bird carries its own level into the battle, and a
@@ -186,7 +232,7 @@ return function(mod)
       if p then
         local pick, pickIndex
         for i, f in ipairs(flyers) do
-          if not f.dead and f.species == enc.species
+          if not f.dead and not f.summonId and f.species == enc.species
              and math.abs(f.cellX - p.cellX)
                + math.abs(f.cellY - p.cellY) <= 2 then
             if f.mode == "ground" or f.mode == "toLand" then
@@ -223,9 +269,7 @@ return function(mod)
   -- night-only species own the night sky and sit out the daylight
   local function flyingSlots(game, mapId, tod)
     local all, night = {}, {}
-    local encDef = game.data.encounters and game.data.encounters[mapId]
-    local slots = encDef and encDef.grass and encDef.grass.slots
-    for _, slot in ipairs(slots or {}) do
+    for _, slot in ipairs(Sky.grassSlots(game.data, mapId)) do
       if Sky.hasType(game.data, slot.species, "FLYING") then
         local pick = { species = slot.species, level = slot.level }
         if NIGHT_ONLY[slot.species] then
@@ -562,6 +606,30 @@ return function(mod)
             and love.math.random(12, 26) or love.math.random(4, 10)
         end
       end
+    elseif self.mode == "summon" then
+      local dx, dy = self.summonX - self.px, self.summonY - self.py
+      if math.abs(dx) + math.abs(dy) <= 8 then
+        -- arrived: this bird is spoken for and leaves the sky here
+        local sid = self.summonId
+        self.summonId = nil
+        self.dead = true
+        battleRest = BATTLE_REST
+        pcall(function()
+          mod.events:emit("mod.wild_skies.flyer_summoned", {
+            summonId = sid, species = self.species, level = self.level,
+            cellX = self.cellX, cellY = self.cellY,
+          })
+        end)
+      else
+        turnToward(self, math.atan2(dy, dx), TURN_MAX * 2 * dt)
+        self:step(dt, 1.35)
+        if self.alt > 12 then
+          self.alt = math.max(12, self.alt - CLIMB * dt)
+        end
+        if self.t > (self.summonBy or 0) then
+          summonFail(self, "too slow")
+        end
+      end
     elseif self.mode == "leave" then
       -- straight out on the exit heading; gone once it clears the view
       self:step(dt, 1)
@@ -774,6 +842,7 @@ return function(mod)
         local f = flyers[i]
         f:tick(ow, dt)
         if f.dead then
+          if f.summonId then summonFail(f, "lost") end
           detach(ow, f)
           table.remove(flyers, i)
         end
@@ -788,6 +857,10 @@ return function(mod)
          and mod.options:get("bumps") then
         local f = flyerNear(p.cellX, p.cellY, 1)
         if f and (f.alt or 0) <= LOW_ALT then
+          local db = mod.find("double_battles")
+          if db and db.exports and db.exports.tagOrganic then
+            pcall(db.exports.tagOrganic)
+          end
           local okQ = mod.world:queueScript({
             { "start_battle", "wild", f.species, f.level or 5 },
           })

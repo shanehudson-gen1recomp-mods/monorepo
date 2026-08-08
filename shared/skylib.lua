@@ -186,6 +186,23 @@ function Sky.hasType(data, species, wanted)
   return false
 end
 
+-- a map's grass encounter slots, or an empty list; the same table the
+-- engine rolls classic encounters from
+function Sky.grassSlots(data, mapId)
+  local encDef = data and data.encounters and data.encounters[mapId]
+  local slots = encDef and encDef.grass and encDef.grass.slots
+  return slots or {}
+end
+
+-- a mon's display name: nickname first, then the species record's
+-- name, then the raw species id
+function Sky.monName(data, mon)
+  if not mon then return "?" end
+  if mon.nickname then return mon.nickname end
+  local def = data and data.pokemon and data.pokemon[mon.species]
+  return (def and def.name) or tostring(mon.species)
+end
+
 function Sky.knowsMove(mon, moveId)
   for _, mv in ipairs((mon and mon.moves) or {}) do
     if (type(mv) == "table" and mv.id or mv) == moveId then return true end

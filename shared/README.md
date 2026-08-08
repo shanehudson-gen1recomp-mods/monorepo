@@ -4,9 +4,10 @@ Build-time shared Lua. Anything here (besides this README) is copied into
 each mod as `lib/shared/` by `scripts/dev.sh`, `scripts/pack.sh` and the
 release workflow, so packed zips stay self-contained.
 
-`skylib.lua` holds the species helpers both mods use: icon-class lookup,
-the mount sprite resolver, the dex-height draw scale, and type/move
-checks.
+`skylib.lua` holds the helpers the mod family shares: icon-class
+lookup, the mount sprite resolver, the dex-height draw scale, type and
+move checks, grass-slot reading (`Sky.grassSlots`) and mon display
+names (`Sky.monName`).
 
 The mount resolver first tries `Sky.SPRITE_SOURCES`, an ordered list of
 adapters over other mods' exports (currently Wilds of Kanto,

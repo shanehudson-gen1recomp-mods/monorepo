@@ -1287,6 +1287,10 @@ return function(mod)
                 require("src.core.Sound").playCry(Game.data, hit.species)
               end)
               mod.log:info("intercepted %s!", tostring(hit.species))
+              local db = mod.find("double_battles")
+              if db and db.exports and db.exports.tagOrganic then
+                pcall(db.exports.tagOrganic)
+              end
               mod.world:queueScript({
                 { "start_battle", "wild", hit.species, hit.level or 5 },
               })

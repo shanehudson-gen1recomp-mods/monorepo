@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.3
+
+- For mod authors: `exports.summonFlyer(cellX, cellY, opts)` calls the
+  nearest bold bird down to a cell and consumes it on arrival, with
+  the `flyer_summoned` / `summon_failed` events reporting exactly one
+  ending per summon. Built for double_battles' visible recruitment.
+
 ## 1.4.2
 
 - Update checks now come from the mod's official mirror repo

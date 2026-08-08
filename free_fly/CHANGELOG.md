@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.4
+
+- With double_battles installed, an aerial interception's battle is
+  tagged organic, so the intercepted bird can gain a second foe like
+  any other wild encounter.
+
 ## 1.4.3
 
 - Fixes FREEFLY showing up in the battle party menu. Picking it there

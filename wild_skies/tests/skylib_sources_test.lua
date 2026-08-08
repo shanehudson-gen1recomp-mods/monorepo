@@ -110,4 +110,14 @@ T.check(Sky.spriteSourceChanged({ mod = "opt_pack" }),
   "registered source matched by id")
 Sky.unregisterSpriteSource("opt_pack")
 
+-- the family's small shared helpers
+T.eq(Sky.monName(data, { nickname = "BUDDY", species = "PIDGEOTTO" }),
+  "BUDDY", "nickname wins")
+T.eq(Sky.monName(data, { species = "MISSINGNO" }), "MISSINGNO",
+  "unknown species falls back to the id")
+local slotData = { encounters = { R1 = { grass = { slots = {
+  { species = "PIDGEY", level = 3 } } } } } }
+T.eq(#Sky.grassSlots(slotData, "R1"), 1, "grass slots read through")
+T.eq(#Sky.grassSlots(slotData, "R2"), 0, "missing map gives empty list")
+
 T.finish("skylib_sources")

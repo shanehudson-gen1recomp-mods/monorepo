@@ -100,6 +100,20 @@ consulted, so a scenario mod can crowd the sky if it wants to. Returns
 the flyer id, or nil plus a reason ("no overworld" when there's no map
 loaded, or the species has no usable sprite and no clear entry point).
 
+### Summoning flyers
+
+`exports.summonFlyer(cellX, cellY, opts)` calls the nearest bold bird
+within `opts.radius` (default 8 cells) down to that cell. It returns a
+summonId, or nil and a reason ("nobody near", or "resting" during the
+after-battle rest). The bird flies hard to the spot; on arrival it
+leaves the sky and `mod.wild_skies.flyer_summoned` fires with
+`{ summonId, species, level, cellX, cellY }`. Every other ending (too
+slow, the map changed, the bird was lost) fires
+`mod.wild_skies.summon_failed` with `{ summonId, reason }`. Exactly one
+of the two always fires, so deferring work on a summon is safe.
+double_battles uses this to fly a visible bird to the player as the
+second foe of a wild double.
+
 ### Events
 
 `mod.wild_skies.flyer_bumped` fires when a low bird collides with the
@@ -110,6 +124,55 @@ walking player and starts its battle. Payload:
 flyer, whoever the caller was, with the same payload shape. Listen to
 this rather than to each consumer's own events if you want to track
 every bird that leaves the sky through the API.
+
+## double_battles
+
+### Starting doubles
+
+| Export / command | Does |
+|---|---|
+| `startWildDouble(spA, lvA, spB, lvB)` | wild 1v2/2v2 on demand |
+| `startTrainerDouble(oppClass, partyIndex)` | one trainer sends two |
+| `startTrainerPair(oppA, idxA, oppB, idxB)` | two trainers share the side |
+| `double_battles:start` / `:trainer` / `:trainer_pair` | the same from map scripts |
+| `isDoubleBattle(battle)` | true for a decorated battle |
+
+### The decorated battle shape (stable)
+
+A decorated battle carries `battle.__double = true`, the extra battlers
+as `battle.enemy2` and `battle.player2`, and populates the engine's
+`sides[n].battlers` lists with both slots per side. These names are the
+contract: chrome mods may read them. `battle.turn_started` gains an
+`enemyAction2` field in doubles.
+
+### Scripted battles and organic tagging
+
+Script-launched wild battles (`start_battle` from map scripts) stay
+1v1: story fights like Snorlax never gain a partner. A mod whose script
+battles ARE organic encounters (wild_skies bumps, free_fly
+interceptions do this) calls `exports.tagOrganic()` just before
+queueing its `start_battle`, which restores doubles eligibility for
+that battle.
+
+### Partner sources
+
+`registerPartnerSource({ id, priority, provide })` lets a mod supply
+the second wild foe. `provide(game, battle)` returns `species, level`
+or nil to pass. Sources run by ascending priority; the built-in
+wild_skies summoned bird sits at 50 and the encounter-list fallback at
+100, so priority below 50 beats the bird and 50-99 runs between bird
+and list. Default priority is 75. `unregisterPartnerSource(id)`
+removes one. Wilds of Kanto could register its visible ground mons
+here, for example.
+
+### Events
+
+`mod.double_battles.double_started` fires as a decorated battle begins:
+`{ battle, format, recruited }` where format is `1v2`, `2v2`,
+`trainer` or `pair` and recruited is true when a summoned wild_skies
+bird became the foe. `mod.double_battles.partner_fainted` and
+`mod.double_battles.partner_joined` report partner-slot changes with
+`{ battle, side, species }` (side 1 is yours).
 
 ## Sprite sources: offering in-air art
 
