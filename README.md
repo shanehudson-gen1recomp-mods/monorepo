@@ -36,7 +36,7 @@ tested versions are in each mod's README.
 
 ## Install
 
-1. Download the zip you want from the mod's release mirror:
+1. Download the zip you want from the mod's official mirror:
    [free_fly](https://github.com/shanehudson-gen1recomp-mods/free_fly/releases)
    or [wild_skies](https://github.com/shanehudson-gen1recomp-mods/wild_skies/releases).
    Every mirror's README lists all the others.

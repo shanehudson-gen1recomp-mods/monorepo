@@ -51,7 +51,9 @@ Source: https://github.com/$ORG/gen1recomp-mods (development happens in the mono
   fi
 
   if ! git -C "$ROOT" rev-parse -q --verify "refs/tags/$monotag" >/dev/null; then
-    git -C "$ROOT" tag "$monotag"
+    # Provenance markers, not artifacts: unsigned, and -c overrides
+    # tag.gpgsign=true so a machine without the signing key still works.
+    git -C "$ROOT" -c tag.gpgsign=false tag -m "$mod $version" "$monotag"
     git -C "$ROOT" push origin "$monotag"
   fi
 

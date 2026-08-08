@@ -29,7 +29,7 @@ for mod in "${mods[@]}"; do
     fi
   done
 
-  readme="# $mod (release mirror)
+  readme="# $mod (Official mirror)
 
 Installable releases of the **$(name_of "$mod")** mod for [gen1recomp](https://github.com/bryanthaboi/gen1recomp).
 
@@ -40,6 +40,9 @@ Source code and issues live in the [mods monorepo](https://github.com/$ORG/gen1r
 ## All mods in this family
 
 $listing"
+  # Command substitution strips trailing newlines when reading the remote
+  # copy back, so strip them here too or the comparison never matches.
+  readme="$(printf '%s' "$readme")"
 
   current="$(gh api "repos/$ORG/$mod/contents/README.md" --jq .content 2>/dev/null \
     | python3 -c "import sys,base64;sys.stdout.write(base64.b64decode(sys.stdin.read()).decode())" \
@@ -55,3 +58,29 @@ $listing"
   gh api --method PUT "repos/$ORG/$mod/contents/README.md" "${args[@]}" --jq .commit.sha >/dev/null
   echo "$mod README updated"
 done
+
+# The org profile (github.com/$ORG) gets the same directory.
+listing=""
+for mod in "${mods[@]}"; do
+  listing+="- [$(name_of "$mod")](https://github.com/$ORG/$mod) (\`$mod\`)"$'\n'
+done
+
+profile="# gen1recomp mods
+
+Mods for [gen1recomp](https://github.com/bryanthaboi/gen1recomp). Each mod's repo here is its official mirror: grab the newest \`.zip\` from its Releases and install it in-game via **MODS > Import mod .zip**. Installed mods get update checks through the launcher automatically.
+
+$listing
+Development happens in the [mods monorepo](https://github.com/$ORG/gen1recomp-mods); the per-mod repos only host releases."
+
+current="$(gh api "repos/$ORG/.github/contents/profile/README.md" --jq .content 2>/dev/null \
+  | python3 -c "import sys,base64;sys.stdout.write(base64.b64decode(sys.stdin.read()).decode())" \
+  2>/dev/null || true)"
+if [ "$current" = "$profile" ]; then
+  echo "org profile up to date"
+else
+  sha="$(gh api "repos/$ORG/.github/contents/profile/README.md" --jq .sha 2>/dev/null || true)"
+  args=(-f message="Sync org profile" -f content="$(printf '%s' "$profile" | base64)")
+  [ -n "$sha" ] && args+=(-f sha="$sha")
+  gh api --method PUT "repos/$ORG/.github/contents/profile/README.md" "${args[@]}" --jq .commit.sha >/dev/null
+  echo "org profile updated"
+fi
