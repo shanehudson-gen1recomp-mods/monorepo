@@ -22,6 +22,13 @@ name_of() {
 }
 
 for mod in "${mods[@]}"; do
+  # Demo gifs live in the monorepo's .github/; only tracked ones are
+  # guaranteed to resolve on raw.githubusercontent.com.
+  demo=""
+  if git -C "$ROOT" ls-files --error-unmatch ".github/$mod-demo.gif" >/dev/null 2>&1; then
+    demo=$'\n'"![Demo](https://raw.githubusercontent.com/$ORG/monorepo/main/.github/$mod-demo.gif)"$'\n'
+  fi
+
   listing=""
   for other in "${mods[@]}"; do
     if [ "$other" = "$mod" ]; then
@@ -34,7 +41,7 @@ for mod in "${mods[@]}"; do
   readme="# $mod (Official mirror)
 
 Installable releases of the **$(name_of "$mod")** mod for [gen1recomp](https://github.com/bryanthaboi/gen1recomp).
-
+$demo
 Grab the newest \`.zip\` from [Releases](https://github.com/$ORG/$mod/releases) and install it in-game: **MODS > Import mod .zip**. Installed copies get update checks through the launcher automatically.
 
 Source code and issues live in the [mods monorepo](https://github.com/$ORG/monorepo); this repo only hosts releases.
