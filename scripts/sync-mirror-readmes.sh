@@ -40,6 +40,9 @@ Source code and issues live in the [mods monorepo](https://github.com/$ORG/gen1r
 ## All mods in this family
 
 $listing"
+  # Command substitution strips trailing newlines when reading the remote
+  # copy back, so strip them here too or the comparison never matches.
+  readme="$(printf '%s' "$readme")"
 
   current="$(gh api "repos/$ORG/$mod/contents/README.md" --jq .content 2>/dev/null \
     | python3 -c "import sys,base64;sys.stdout.write(base64.b64decode(sys.stdin.read()).decode())" \
