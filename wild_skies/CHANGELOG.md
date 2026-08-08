@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0
+
+- Ultra-rare sightings: 1 in 1000 spawns under an open outdoor sky is
+  a legendary bird (Articuno, Zapdos or Moltres, L48-52) instead of
+  the map's usual pick. A legend flies alone, is always bold, and the
+  roll skips towns, caves and the forest canopy, so every sighting is
+  one you can battle and catch through the usual bump and free_fly
+  interception seams.
+
 ## 1.4.3
 
 - For mod authors: `exports.summonFlyer(cellX, cellY, opts)` calls the
