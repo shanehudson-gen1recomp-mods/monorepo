@@ -8,11 +8,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ORG="shanehudson-gen1recomp-mods"
 
+# Tracked mods only: an untracked mod dir is private dev work and must
+# not leak into public READMEs or the org profile.
 mods=()
-for m in "$ROOT"/*/manifest.json; do
-  [ -f "$m" ] || continue
-  mods+=("$(basename "$(dirname "$m")")")
-done
+while IFS= read -r m; do
+  case "$m" in */*/*) continue ;; esac
+  mods+=("$(dirname "$m")")
+done <<< "$(git -C "$ROOT" ls-files '*/manifest.json')"
 [ ${#mods[@]} -gt 0 ] || { echo "no mods found"; exit 1; }
 
 name_of() {

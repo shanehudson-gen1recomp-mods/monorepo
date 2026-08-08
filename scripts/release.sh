@@ -17,10 +17,12 @@ ORG="shanehudson-gen1recomp-mods"
 
 mods=("$@")
 if [ ${#mods[@]} -eq 0 ]; then
-  for m in "$ROOT"/*/manifest.json; do
-    [ -f "$m" ] || continue
-    mods+=("$(basename "$(dirname "$m")")")
-  done
+  # Tracked mods only, so a private in-dev mod dir can never be
+  # released by the "release everything" default.
+  while IFS= read -r m; do
+    case "$m" in */*/*) continue ;; esac
+    mods+=("$(dirname "$m")")
+  done <<< "$(git -C "$ROOT" ls-files '*/manifest.json')"
 fi
 
 "$ROOT/scripts/pack.sh" "${mods[@]}"
