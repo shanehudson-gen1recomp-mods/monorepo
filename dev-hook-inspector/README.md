@@ -5,6 +5,13 @@ that lists every loaded mod; pick one to see its public surface: the
 exports other mods can call through `mod.find(id)`, and the events it
 broadcasts. Pick a hook to read its description.
 
+Every pick is also printed to the console (the terminal that launched
+the game), untruncated and copyable:
+
+```
+[info] [dev-hook-inspector] export (function) free_fly.isFlying: Flight state for other mods; ...
+```
+
 No mod has to cooperate to show up here:
 
 - Exports are enumerated live off the loader, so the list is what is

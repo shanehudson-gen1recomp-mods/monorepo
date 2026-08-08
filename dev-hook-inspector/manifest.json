@@ -1,7 +1,7 @@
 {
   "id": "dev-hook-inspector",
   "name": "Dev Hook Inspector",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "entry": "main.lua",
   "api": 2,
   "category": "OTHER",

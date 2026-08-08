@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- README documents that every pick is also printed to the console. No
+  gameplay changes.
+
 ## 0.1.0
 
 - First release. HOOKS on the START menu lists every loaded mod, its
