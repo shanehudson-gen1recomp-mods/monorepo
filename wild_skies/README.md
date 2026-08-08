@@ -22,7 +22,7 @@ High flyers never trigger battles from the ground. If you also have
 [free_fly](../free_fly) installed, flying into one starts its battle
 mid-air, under the same rules.
 
-![Demo](https://raw.githubusercontent.com/ShaneHudson/gen1recomp-mods/main/.github/wild_skies-demo.gif)
+![Demo](https://raw.githubusercontent.com/shanehudson-gen1recomp-mods/gen1recomp-mods/main/.github/wild_skies-demo.gif)
 
 ## Options
 
@@ -80,7 +80,7 @@ its own resolver, so register with every mod you want to dress.
 ## Install
 
 1. Download `wild_skies-<version>.zip` from the
-   [releases page](https://github.com/ShaneHudson/gen1recomp-mods/releases).
+   [releases page](https://github.com/shanehudson-gen1recomp-mods/wild_skies/releases).
 2. In the game, open MODS from the pause menu (or press F10) and pick
    Import mod .zip.
 3. Enable the mod in the same menu.
