@@ -20,14 +20,14 @@ local ow = {
   player = {},
 }
 
-local function menuFor(mon, badge)
+local function menuFor(mon, badge, battle)
   local game = {
     data = Data,
     save = { party = { mon }, inventory = badge and { THUNDERBADGE = true } or {} },
   }
   local out = Runtime.call("ui.party.submenu",
     function(_, items) return items end,
-    game, {}, mon, { overworld = ow })
+    game, {}, mon, { overworld = ow, battle = battle })
   for _, item in ipairs(out or {}) do
     if item.label == "FREEFLY" then return true end
   end
@@ -55,6 +55,21 @@ T.check(menuFor({ species = "PIDGEOT",
 -- compatibility alone is not enough: no move, no marker, no relaxing mod
 T.check(not menuFor({ species = "PIDGEOT", moves = {} }, true),
   "a compatible non-knower stays hidden without a relaxing mod")
+
+-- the battle switch menu runs through the same hook; FREEFLY there let
+-- a mid-battle switch unwind the battle and take off
+local flyer = { species = "PIDGEOT", moves = { { id = "FLY", pp = 15 } } }
+T.check(not menuFor(flyer, true, {}),
+  "an eligible flyer stays hidden in the battle switch menu")
+
+-- the mod also tracks battles itself, so a menu context that forgets to
+-- say battle (another mod's picker, a stale screen) still shows nothing
+Runtime.emit("battle.started", {})
+T.check(not menuFor(flyer, true),
+  "a running battle hides FREEFLY even without a battle ctx")
+Runtime.emit("battle.ended", {})
+T.check(menuFor(flyer, true),
+  "the entry returns once the battle ends")
 
 run.release()
 T.finish("free_fly_menu")

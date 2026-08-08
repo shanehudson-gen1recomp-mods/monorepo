@@ -1,7 +1,7 @@
 {
   "id": "free_fly",
   "name": "Free Fly",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "entry": "main.lua",
   "api": 2,
   "category": "MECHANIC",

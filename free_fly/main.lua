@@ -200,6 +200,12 @@ return function(mod)
 
   local function startFlight(game, mon)
     if flying() then return end
+    -- the last line of defense: no route into flight is legal in battle,
+    -- however the caller got here
+    if state.inBattle then
+      mod.log:warn("takeoff refused: a battle is running")
+      return
+    end
     local ow = mod.world and mod.world:overworld()
     if not (ow and ow.player) then
       mod.log:warn("no overworld to take off from; FREEFLY skipped")
@@ -272,15 +278,28 @@ return function(mod)
     return next(game)
   end)
 
+  -- FREEFLY exists in exactly one place: the overworld party submenu,
+  -- as the doorway into flight.  It is not a move (never in game.data),
+  -- so no summary screen, Pokedex or PC can ever list it; these guards
+  -- keep the menu entry itself out of every other party-menu context.
+  mod.events:on("battle.started", function() state.inBattle = true end)
+  mod.events:on("battle.ended", function() state.inBattle = nil end)
+
   mod.hooks:wrap("ui.party.submenu", function(next, game, items, mon, ctx)
     local out = next(game, items, mon, ctx)
     if type(out) ~= "table" then return out end
+    -- the battle switch menu also runs through this hook; taking off
+    -- from there would unwind the battle screen itself
+    if (ctx and ctx.battle) or state.inBattle then return out end
     local ow = ctx and ctx.overworld
     if not (ow and ow.map and ow.map.def) or flying() then return out end
     if not (eligibleFlyer(game, ow, mon) and badgeOk(game, mon)) then return out end
     if ow.player and ow.player.onBike then return out end
     if not skyAbove(game, ow.map.def) then return out end
     table.insert(out, 1, { label = "FREEFLY", onSelect = function(m, g)
+      -- a stale entry (menu built before a battle started) must not
+      -- unwind the battle screen below it
+      if state.inBattle then return end
       -- unwind party menu / start menu back to the overworld, then lift off
       local stack = g.stack
       while stack:top() and not stack:top().isOverworld do stack:pop() end
@@ -737,6 +756,9 @@ return function(mod)
     -- same gates as the FREEFLY menu entry.  Returns ok, failure text.
     local function partnerTakeoff(ow)
       local save = Game.save
+      if state.inBattle then
+        return false, "This isn't the\ntime to use that!"
+      end
       if not (save and ow.map and ow.map.def) then
         return false, "Not here."
       end

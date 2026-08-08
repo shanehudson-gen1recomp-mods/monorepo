@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.3
+
+- Fixes FREEFLY showing up in the battle party menu. Picking it there
+  (while switching Pokemon mid-fight) tore down the battle and took
+  off. The entry now appears only in the overworld party menu, and
+  takeoff refuses while any battle is running, whichever path asks for
+  it, the FLY WHISTLE included.
+
 ## 1.4.2
 
 - Update checks now come from the mod's official mirror repo
