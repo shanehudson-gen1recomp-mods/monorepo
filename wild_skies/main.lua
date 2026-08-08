@@ -98,6 +98,17 @@ return function(mod)
     FEAROW = { 20, 27 }, GOLBAT = { 22, 26 },
   }
 
+  -- once in a thousand spawns, an open outdoor sky hosts a legend
+  -- instead.  Only under the open sky (never caves, forest canopy or
+  -- peaceful town air, where it could not battle), always bold (a
+  -- sighting this rare must be catchable), and never flocked.
+  local ULTRA_ODDS = 1000
+  local ULTRA_RARES = {
+    { species = "ARTICUNO", level = { 48, 52 } },
+    { species = "ZAPDOS",   level = { 48, 52 } },
+    { species = "MOLTRES",  level = { 48, 52 } },
+  }
+
   local flyers = {}
   local battleRest = 0
   local summonFail -- forward: every summon ends in exactly one event
@@ -957,6 +968,15 @@ return function(mod)
       cooldown = d.cooldown * (picksCache.forest and 2.5
         or picksCache.ambient and 1.8 or 1) + love.math.random() * 6
       local pick = picks[love.math.random(#picks)]
+      local ultra = false
+      if not picksCache.inside and not picksCache.forest
+         and not picksCache.peaceful
+         and love.math.random(ULTRA_ODDS) == 1 then
+        local u = ULTRA_RARES[love.math.random(#ULTRA_RARES)]
+        pick = { species = u.species,
+                 level = love.math.random(u.level[1], u.level[2]) }
+        ultra = true
+      end
       if not pick.level then
         -- roll one of the map's own slot levels; with no wildlife to
         -- read (towns), scale with the player's journey instead, one
@@ -1004,13 +1024,20 @@ return function(mod)
       local flyer = Flyer.new(Game, ow, pick)
       if flyer then
         tuneForMap(flyer)
+        if ultra then flyer.bold = true end
         flyers[#flyers + 1] = flyer
         table.insert(ow.entities, flyer)
-        mod.log:info("%s (L%d) is roaming %s",
-                     tostring(flyer.species), flyer.level or 0, ow.map.id)
+        if ultra then
+          mod.log:info("the legendary %s (L%d) is crossing %s!",
+                       tostring(flyer.species), flyer.level or 0, ow.map.id)
+        else
+          mod.log:info("%s (L%d) is roaming %s",
+                       tostring(flyer.species), flyer.level or 0, ow.map.id)
+        end
         -- sometimes company arrives: a loose flock of the same species,
-        -- inside the cap; the boids pull them into formation
-        if flyer.mode == "roam" and not picksCache.forest then
+        -- inside the cap; the boids pull them into formation.  A legend
+        -- flies alone.
+        if flyer.mode == "roam" and not ultra and not picksCache.forest then
           local room = cap - #flyers
           if room > 0 and love.math.random() < 0.4 then
             for _ = 1, math.min(room, love.math.random(1, 2)) do

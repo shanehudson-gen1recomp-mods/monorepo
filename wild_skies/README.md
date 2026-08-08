@@ -22,6 +22,12 @@ High flyers never trigger battles from the ground. If you also have
 [free_fly](../free_fly) installed, flying into one starts its battle
 mid-air, under the same rules.
 
+And once in a very long while (1 in 1000 spawns), the bird crossing an
+open outdoor sky is Articuno, Zapdos or Moltres, around L50. A legend
+flies alone, is always bold, and never appears over towns, in caves or
+under the forest canopy, so when you do see one it can actually be
+fought and caught.
+
 ![Demo](https://raw.githubusercontent.com/shanehudson-gen1recomp-mods/monorepo/main/.github/wild_skies-demo.gif)
 
 ## Options
