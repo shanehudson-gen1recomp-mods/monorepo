@@ -200,14 +200,22 @@ return function(mod)
     game.stack:push(mod.ui.ListMenu.new(game, m.name:upper(), rows, {
       keyRepeat = true,
       onChoose = function(item)
+        -- devs watching the run get the same line on the console,
+        -- untruncated and copyable
         if not item.hook then
-          pushText(game, m.name .. ": " .. (m.description ~= ""
-            and m.description or "No description in the manifest."))
+          local text = m.name .. ": " .. (m.description ~= ""
+            and m.description or "No description in the manifest.")
+          mod.log:info("%s", text)
+          pushText(game, text)
           return
         end
         local hook = item.hook
         local header = hook.kind == "event" and hook.name
           or (m.id .. "." .. hook.name)
+        local tag = hook.kind == "event" and "event"
+          or ("export (" .. (hook.valueType or "?") .. ")")
+        mod.log:info("%s %s: %s", tag, header,
+          hook.doc or "no description found")
         pushText(game, header .. ": " .. (hook.doc or NO_DOC))
       end,
     }))
