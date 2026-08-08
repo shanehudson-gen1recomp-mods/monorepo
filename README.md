@@ -36,16 +36,25 @@ tested versions are in each mod's README.
 
 ## Install
 
-1. Download the zip you want from the mod's official mirror:
-   [free_fly](https://github.com/shanehudson-gen1recomp-mods/free_fly/releases)
-   or [wild_skies](https://github.com/shanehudson-gen1recomp-mods/wild_skies/releases).
-   Every mirror's README lists all the others.
-2. In the game, open MODS from the pause menu (or press F10) and pick
-   Import mod .zip.
-3. Enable the mod in the same menu.
+Always download a mod from its own official mirror below. The mirror is
+the repo your installed copy checks for updates, so a zip from anywhere
+else (including this repo's old releases) may lag behind or stop
+updating. Each release ships one `<mod>-<version>.zip`; grab the newest.
+
+| Mod | Official mirror | Download |
+| --- | --- | --- |
+| Free Fly | [`free_fly`](https://github.com/shanehudson-gen1recomp-mods/free_fly) | [Releases](https://github.com/shanehudson-gen1recomp-mods/free_fly/releases/latest) |
+| Wild Skies | [`wild_skies`](https://github.com/shanehudson-gen1recomp-mods/wild_skies) | [Releases](https://github.com/shanehudson-gen1recomp-mods/wild_skies/releases/latest) |
+
+Then, in the game:
+
+1. Open MODS from the pause menu (or press F10) and pick Import mod .zip.
+2. Enable the mod in the same menu.
 
 Updates show up in the game's mod manager automatically once a mod is
-installed.
+installed. Every mirror's README also lists all the other mirrors, and
+the [org page](https://github.com/shanehudson-gen1recomp-mods) carries
+the full directory.
 
 Contributing or building from source: see [DEVELOPMENT.md](DEVELOPMENT.md).
 

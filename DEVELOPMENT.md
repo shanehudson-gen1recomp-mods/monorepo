@@ -55,4 +55,5 @@ locally just uses your `gh` login and needs no setup.
 
 Adding a mod: create `<id>/` with its `manifest.json` pointing `github`
 at `shanehudson-gen1recomp-mods/<id>`, create that (public) repo, and
-release. The README sync fills in the cross-links.
+release. The README sync fills in the cross-links; add a row to the
+install table in this repo's README by hand.
