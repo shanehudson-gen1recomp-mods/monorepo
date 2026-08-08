@@ -35,6 +35,10 @@ name_of() {
   python3 -c "import json;print(json.load(open('$ROOT/$1/manifest.json')).get('name','$1'))"
 }
 
+desc_of() {
+  python3 -c "import json;print(json.load(open('$ROOT/$1/manifest.json')).get('description',''))"
+}
+
 for mod in "${mods[@]}"; do
   # Demo gifs live in the monorepo's .github/; only tracked ones are
   # guaranteed to resolve on raw.githubusercontent.com.
@@ -46,9 +50,9 @@ for mod in "${mods[@]}"; do
   listing=""
   for other in "${mods[@]}"; do
     if [ "$other" = "$mod" ]; then
-      listing+="- **$(name_of "$other")** (\`$other\`, this repo)"$'\n'
+      listing+="- **$(name_of "$other")** (\`$other\`, this repo): $(desc_of "$other")"$'\n'
     elif ! is_unlisted "$other"; then
-      listing+="- [$(name_of "$other")](https://github.com/$ORG/$other) (\`$other\`)"$'\n'
+      listing+="- [$(name_of "$other")](https://github.com/$ORG/$other) (\`$other\`): $(desc_of "$other")"$'\n'
     fi
   done
 
@@ -60,10 +64,19 @@ $listing"
   # and the family points at nothing here.
   if is_unlisted "$mod"; then family=""; fi
 
+  # The manifest description is the one-line what; an optional tracked
+  # MIRROR.md in the mod's directory carries the longer what-and-why.
+  blurb=""
+  if git -C "$ROOT" ls-files --error-unmatch "$mod/MIRROR.md" >/dev/null 2>&1; then
+    blurb=$'\n'"$(cat "$ROOT/$mod/MIRROR.md")"$'\n'
+  fi
+
   readme="# $mod (Official mirror)
 
 Installable releases of the **$(name_of "$mod")** mod for [gen1recomp](https://github.com/bryanthaboi/gen1recomp).
-$demo
+
+$(desc_of "$mod")
+$demo$blurb
 Grab the newest \`.zip\` from [Releases](https://github.com/$ORG/$mod/releases) and install it in-game: **MODS > Import mod .zip**. Installed copies get update checks through the launcher automatically.
 
 Source code and issues live in the [mods monorepo](https://github.com/$ORG/monorepo); this repo only hosts releases.
@@ -92,7 +105,7 @@ done
 listing=""
 for mod in "${mods[@]}"; do
   if ! is_unlisted "$mod"; then
-    listing+="- [$(name_of "$mod")](https://github.com/$ORG/$mod) (\`$mod\`)"$'\n'
+    listing+="- [$(name_of "$mod")](https://github.com/$ORG/$mod) (\`$mod\`): $(desc_of "$mod")"$'\n'
   fi
 done
 
