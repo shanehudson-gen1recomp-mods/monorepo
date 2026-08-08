@@ -17,6 +17,20 @@ while IFS= read -r m; do
 done <<< "$(git -C "$ROOT" ls-files '*/manifest.json')"
 [ ${#mods[@]} -gt 0 ] || { echo "no mods found"; exit 1; }
 
+# Quiet launches: a mod listed here releases on its own mirror but is
+# left off the other mirrors' listings, the org profile, and any other
+# public directory until it graduates. Its own mirror README still
+# renders (without the family listing).
+UNLISTED=("double_battles")
+
+is_unlisted() {
+  local candidate="$1"
+  for u in "${UNLISTED[@]}"; do
+    [ "$u" = "$candidate" ] && return 0
+  done
+  return 1
+}
+
 name_of() {
   python3 -c "import json;print(json.load(open('$ROOT/$1/manifest.json')).get('name','$1'))"
 }
@@ -33,10 +47,18 @@ for mod in "${mods[@]}"; do
   for other in "${mods[@]}"; do
     if [ "$other" = "$mod" ]; then
       listing+="- **$(name_of "$other")** (\`$other\`, this repo)"$'\n'
-    else
+    elif ! is_unlisted "$other"; then
       listing+="- [$(name_of "$other")](https://github.com/$ORG/$other) (\`$other\`)"$'\n'
     fi
   done
+
+  family="## All mods in this family
+
+$listing"
+  # An unlisted mod's own README carries no family section either way:
+  # the point of a quiet launch is that nothing points at the family
+  # and the family points at nothing here.
+  if is_unlisted "$mod"; then family=""; fi
 
   readme="# $mod (Official mirror)
 
@@ -46,9 +68,7 @@ Grab the newest \`.zip\` from [Releases](https://github.com/$ORG/$mod/releases) 
 
 Source code and issues live in the [mods monorepo](https://github.com/$ORG/monorepo); this repo only hosts releases.
 
-## All mods in this family
-
-$listing"
+$family"
   # Command substitution strips trailing newlines when reading the remote
   # copy back, so strip them here too or the comparison never matches.
   readme="$(printf '%s' "$readme")"
@@ -71,7 +91,9 @@ done
 # The org profile (github.com/$ORG) gets the same directory.
 listing=""
 for mod in "${mods[@]}"; do
-  listing+="- [$(name_of "$mod")](https://github.com/$ORG/$mod) (\`$mod\`)"$'\n'
+  if ! is_unlisted "$mod"; then
+    listing+="- [$(name_of "$mod")](https://github.com/$ORG/$mod) (\`$mod\`)"$'\n'
+  fi
 done
 
 profile="# gen1recomp mods

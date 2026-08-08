@@ -1,0 +1,20 @@
+return {
+  summary   = "Wild battles against two Pokémon at once (1v2 proof of concept).",
+  author    = "Shane Hudson",
+  tags      = { "battle", "mechanic", "doubles" },
+  differences = {
+    changed = {
+      "with WILD DOUBLES on, wild encounters can bring a second foe",
+    },
+    added = {
+      "both foes act every turn; beat both to win",
+    },
+    known = {
+      "proof of concept: your moves hit the lead foe until it faints",
+      "the second foe skips end-of-turn poison/burn and trapping moves",
+      "catching targets the lead foe; link play refuses modded formats",
+    },
+  },
+  credits = {},
+  compat  = { engine = "0.0.0-dev || >=0.1.0 <2.0.0", modApi = 2 },
+}
