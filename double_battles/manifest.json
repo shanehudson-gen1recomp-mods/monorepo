@@ -1,7 +1,7 @@
 {
   "id": "double_battles",
   "name": "Double Battles",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "entry": "main.lua",
   "api": 2,
   "category": "MECHANIC",
@@ -9,9 +9,11 @@
   "dependencies": [],
   "optional_dependencies": [],
   "conflicts": [],
-  "permissions": ["engine_internals"],
+  "permissions": [
+    "engine_internals"
+  ],
   "affects_link": true,
   "game_version": "0.0.0-dev || >=0.1.0 <2.0.0",
-  "description": "Wild battles against two Pokémon at once: 1v2 today, full 2v2 on the way.",
+  "description": "Wild and trainer double battles: 1v2, 2v2 and trainer pairs, in classic, wide and 3D.",
   "github": "shanehudson-gen1recomp-mods/double_battles"
 }

@@ -1,13 +1,17 @@
 # Double Battles
 
-Wild battles against two Pokémon at once. This is the proof-of-concept
-phase: 1v2, with full 2v2 and trainer doubles on the roadmap.
+Wild and trainer battles against two Pokémon at once: 1v2, full 2v2,
+trainer doubles and two-trainer pairs, in the classic layout, the wide
+layout and Dramatic Shape's 3D battle modes.
 
-> **Known limitation:** 3D battle modes don't work well with doubles
-> yet. Dramatic Shape's 2D-3D and STADIUM rungs stage one Pokémon per
-> side, so a double battle there shows only the foe you're aiming at
-> (the HUD and targeting still work). Play doubles in the CLASSIC or
-> WIDE battle layout for the full two-Pokémon view.
+> **3D battles:** with Dramatic Shape installed, both Pokémon on each
+> side stand together on the arena, the aim frame blinks on the mon
+> you're targeting, and the HUD follows whoever is acting. On the
+> STADIUM rungs a side showing two Pokémon rides the flat battle cards
+> (the 3D models pose one mon a side); the models return the moment
+> that side is back down to one. Camera mods that ride Dramatic
+> Shape's battle camera (Battle Cinematics, for example) frame the
+> same scene and need nothing extra.
 
 Turn it on in Mod Settings: WILD DOUBLES set to SOMETIMES (about 30% of
 wild encounters) or ALWAYS. A second foe from the map's own encounter
@@ -42,13 +46,22 @@ a normal 1v1 against their last Pokémon.
 In the target prompt you can also just click (or tap) a foe to aim at
 it, and click it again to lock in.
 
+Switching works the same way: with your pair up, picking a Pokémon
+from the party menu asks which of yours steps back (LEFT/RIGHT to aim,
+a green frame marks it, A locks in, B cancels; clicking works too).
+The recall spends that Pokémon's turn and resolves before any move
+lands, so the switch-in can still be hit, exactly like gen 1's own
+free-hit rule. Your other Pokémon keeps its move.
+
 For map authors: `double_battles:trainer_pair OPP_A idxA OPP_B idxB`
 stages two trainers against your pair; nothing pairs up on its own.
 
-## Proof-of-concept limits (roadmap items)
+## Known limits (roadmap items)
 
-- Animations shift rigidly to the partner positions; long beams can
-  look approximate.
+- Animations shift rigidly to the partner positions in the flat
+  layouts; long beams can look approximate. In 3D the burst plays at
+  the pair's cell rather than on the exact partner.
+- Pointer aiming is classic/wide only; in 3D use LEFT/RIGHT and A.
 - Link play with this mod enabled is refused by the handshake, by
   design: modded battle formats cannot stay in lockstep with unmodded
   peers.

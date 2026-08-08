@@ -134,6 +134,59 @@ return function(mod)
     return true
   end
 
+  -- scene owners: mods that stage the battlers themselves (Dramatic
+  -- Shape's 3D rungs, cinematic battle cameras).  While one is active
+  -- our flat partner draws, the classic aim frames and the rigid
+  -- animation shift all stand down; the slot borrow still keeps every
+  -- HUD honest, and a scene adapter can stage the partners its own way.
+  local sceneDetectors = {
+    { id = "dramatic_shape",
+      active = function(b) return b.dramaticShapeShot ~= nil end },
+  }
+  mod.exports.unregisterSceneDetector = function(id)
+    for i = #sceneDetectors, 1, -1 do
+      if sceneDetectors[i].id == id then
+        table.remove(sceneDetectors, i)
+        return true
+      end
+    end
+    return false
+  end
+  mod.exports.registerSceneDetector = function(det)
+    if type(det) ~= "table" or det.id == nil
+       or type(det.active) ~= "function" then
+      return false, "detector with id and active(battle) required"
+    end
+    mod.exports.unregisterSceneDetector(det.id)
+    sceneDetectors[#sceneDetectors + 1] = det
+    return true
+  end
+  local function sceneActive(battle)
+    for _, det in ipairs(sceneDetectors) do
+      local ok, hit = pcall(det.active, battle)
+      if ok and hit then return true end
+    end
+    return false
+  end
+
+  -- what UI mods may read while a doubles battle runs: the battler
+  -- under the aim cursor (either prompt), and the partner an action
+  -- has borrowed the HUD for.  Both are nil outside those windows.
+  mod.exports.aimedBattler = function(battle)
+    if type(battle) ~= "table" or not battle.__double then return nil end
+    if battle.phase == "db_target" then
+      return battle.__dbAimBattler or battle.enemy
+    end
+    if battle.phase == "db_switch_target" then
+      return battle.__dbSwitchAim or battle.player
+    end
+    return nil
+  end
+  mod.exports.focusBattler = function(battle)
+    if type(battle) ~= "table" or not battle.__double then return nil end
+    return battle.__dbFocus
+  end
+
   -- the second healthy party mon that is not already out front
   local function secondHealthy(save, leadMon)
     for _, m in ipairs(save.party or {}) do
@@ -155,6 +208,18 @@ return function(mod)
     end
     if a == 1 then return 94, 0, 58 end
     return 58, 26, 36
+  end
+
+  -- where one of yours stands, likewise by sticky anchor: the vanilla
+  -- back-sprite slot, or the partner card at the lead's shoulder
+  local function allyRect(battle, b)
+    local a = (b and b.dbAnchor) or 1
+    if battle.wideRegion then
+      if a == 1 then return 16, 48, 48 end
+      return 72, 56, 40
+    end
+    if a == 1 then return 8, 48, 48 end
+    return 52, 56, 40
   end
 
   -- ------- the decoration
@@ -440,7 +505,11 @@ return function(mod)
       local origAnimDraw = battle.animPlayer.draw
       battle.animPlayer.draw = function(a, ...)
         local shift = battle.__dbAnimShift
-        if not shift then return origAnimDraw(a, ...) end
+        -- a 3D scene remaps the whole anim frame onto the arena axis,
+        -- where our classic sideways shift points the wrong way
+        if not shift or sceneActive(battle) then
+          return origAnimDraw(a, ...)
+        end
         love.graphics.push()
         love.graphics.translate(shift[1], shift[2])
         local okD, errD = pcall(origAnimDraw, a, ...)
@@ -457,13 +526,11 @@ return function(mod)
     local origPics = battle.drawPicsLayer
     battle.drawPicsLayer = function(self, slide, sx, sy, onlySide,
                                     skipMenuClip)
-      -- Dramatic Shape's 3D rungs stage the mons as billboards in the
-      -- world and suppress the flat pics layer for the shot; partners
-      -- painted flat over that scene double every sprite.  Until the
-      -- arena understands two battlers a side, 3D battles show the
-      -- vanilla single-mon scene (the lead slot, which the aim swap
-      -- keeps pointed at the selected foe).
-      if self.dramaticShapeShot then
+      -- a scene owner (Dramatic Shape's 3D rungs, a cinematic camera)
+      -- stages the mons itself; partners painted flat over that scene
+      -- double every sprite, so the flat draw stands down and the
+      -- scene adapter (lib/dramatic_shape.lua for DS) stages both
+      if sceneActive(self) then
         return origPics(self, slide, sx, sy, onlySide, skipMenuClip)
       end
       -- the HUD borrow (battle.draw) swaps slots for the frame; the
@@ -681,18 +748,183 @@ return function(mod)
     battle:syncSides()
 
     -- the party menu knows the lead but not the partner: refuse a
-    -- switch into the mon already fighting beside you
+    -- switch into the mon already fighting beside you.  With your pair
+    -- up, picking a bench mon then asks WHICH of yours steps back (the
+    -- db_switch_target prompt); the vanilla flow only ever swapped the
+    -- lead slot, gave one foe a free move and bypassed the partner's
+    -- whole turn.  With one of yours and two foes, the switch runs
+    -- through our turn so both foes still act.
     local origResolveSwitch = battle.resolveSwitch
     if type(origResolveSwitch) == "function" then
       battle.resolveSwitch = function(self, newMon)
-        if self.player2 and newMon == self.player2.mon then
+        if (self.player2 and newMon == self.player2.mon)
+           or (self.__dbSwapped and self.player
+               and newMon == self.player.mon) then
           self:say(Strings("%s is already\nout!",
                            Sky.monName(self.data, newMon)))
           self.phase = "messages"
           self.afterQueue = "menu"
           return
         end
+        if alive(self.player2) and alive(self.player) then
+          self.__dbSwitchMon = newMon
+          self:__dbSwitchAimAt(self.player)
+          self.phase = "db_switch_target"
+          return
+        end
+        if alive(self.enemy2) then
+          self:resolveTurn({ dbSwitch = newMon })
+          return
+        end
         return origResolveSwitch(self, newMon)
+      end
+    end
+
+    -- switch aiming mirrors the foe aim: the mon about to step back
+    -- occupies the lead slot while the prompt is up, so every HUD names
+    -- it; sticky anchors keep the sprites still through the swap
+    battle.__dbSwitchAimAt = function(self, target)
+      if target == self.player2 and alive(self.player2) then
+        self.player, self.player2 = self.player2, self.player
+        self.__dbSwitchSwapped = not self.__dbSwitchSwapped or nil
+        self:syncSides()
+      end
+      self.__dbSwitchAim = self.player
+      self.player.shownHP = self.player.mon.hp
+      self.player.shownStatus = self.player.mon.status
+    end
+    battle.__dbSwitchReset = function(self)
+      if self.__dbSwitchSwapped then
+        self.player, self.player2 = self.player2, self.player
+        self.__dbSwitchSwapped = nil
+        self:syncSides()
+      end
+      self.__dbSwitchAim = nil
+    end
+
+    -- lock in the recall: the mon that steps back spends its slot's
+    -- action on the switch, whichever slot that is; the other slot
+    -- still picks (or keeps) its own move
+    battle.__dbSwitchConfirm = function(self)
+      local aimed = self.__dbSwitchAim or self.player
+      self:__dbSwitchReset()
+      local mon = self.__dbSwitchMon
+      self.__dbSwitchMon = nil
+      if not mon then
+        self.phase = "menu"
+        return
+      end
+      if aimed == self.player then
+        -- the picking slot recalls itself: the switch is this pass's
+        -- action, and the pass flow carries on as if a move was picked
+        self:resolveTurn({ dbSwitch = mon })
+        return
+      end
+      if aimed ~= self.player2 then
+        self.phase = "menu"
+        return
+      end
+      if self.__dbSwapped then
+        -- pass B aiming at the already-banked lead: its pick is voided
+        -- by its own recall, and the partner keeps choosing
+        self.__dbSlotA = { user = aimed, action = { dbSwitch = mon } }
+      else
+        -- pass A aiming at the partner: bank the recall as the
+        -- partner's action, the lead keeps choosing, pass B is skipped
+        self.__dbForcedB = { user = aimed, mon = mon }
+      end
+      self.phase = "menu"
+    end
+
+    -- the swap itself, executed as a turn entry before any move (gen
+    -- 1's own order: switches resolve first, then the hits land)
+    battle.__dbExecuteSwitch = function(self, outgoing, newMon)
+      if self.result then return end
+      if not newMon or (newMon.hp or 0) <= 0 then
+        mod.log:warn("recall dropped: the bench mon cannot fight")
+        return
+      end
+      if (self.player and self.player.mon == newMon)
+         or (self.player2 and self.player2.mon == newMon) then
+        mod.log:warn("recall dropped: the bench mon is already out")
+        return
+      end
+      local isLead = outgoing == self.player
+      if not isLead and outgoing ~= self.player2 then
+        mod.log:warn("recall dropped: the recalled mon left its slot")
+        return
+      end
+      local BattleState = require("src.battle.BattleState")
+      local Runtime = require("src.mods.Runtime")
+      local okB, nb = pcall(BattleState.makeBattler, self.data, newMon,
+                            true, self.game.save)
+      if not (okB and nb) then
+        mod.log:warn("recall dropped: battler build failed: %s",
+                     tostring(nb))
+        return
+      end
+      mod.log:info("recall: %s steps back for %s (%s slot)",
+                   tostring(outgoing.name), tostring(nb.name),
+                   isLead and "lead" or "partner")
+      pcall(function() self:restoreMimicked(outgoing) end)
+      nb.dbAnchor = outgoing.dbAnchor or (isLead and 1 or 2)
+      if isLead then
+        self.player = nb
+      else
+        self.player2 = nb
+        -- the HUD borrow follows the incoming partner through its send
+        self.__dbFocus = nb
+      end
+      -- later entries this turn may still aim at the withdrawn body
+      self.__dbReplaced = self.__dbReplaced or {}
+      self.__dbReplaced[outgoing] = nb
+      -- SendOutMon: any player send-out ends the foes' trapping moves
+      for _, foe in ipairs({ self.enemy, self.enemy2 }) do
+        if foe then
+          foe.trappingTurns, foe.trapMove, foe.trapDamage = nil, nil, nil
+        end
+      end
+      self:syncSides()
+      self:markParticipant()
+      Runtime.emit("battle.battler_switched", {
+        battle = self, side = self.sides[1], battler = nb,
+        previous = outgoing,
+      })
+      -- SendOutMon puts the menus back on FIGHT / the first move
+      self.menuIndex, self.moveIndex = 1, 1
+      self:sayNext(self:sendOutText(nb.name))
+      self:animNext("POOF_ANIM", false)
+      if isLead then self.sendingOut = true end
+      self:actNext(function()
+        if isLead then
+          self.sendingOut = false
+          self:startGrowIn(nb)
+        end
+        self:playEntranceCry(nb)
+      end)
+    end
+
+    -- pic effects (the attacker's lunge, DIG's hide, the target blink)
+    -- resolve their battler from a side flag, which the engine maps to
+    -- the slot LEAD -- so a partner's attack visibly played on the
+    -- lead.  While an action involves a partner, the same side flag
+    -- resolves to the battler the action actually involves.
+    local origFxBattler = battle.animFxBattler
+    if type(origFxBattler) == "function" then
+      battle.animFxBattler = function(self, flipped)
+        local isPlayer = self.animAttackerIsPlayer
+        if flipped then isPlayer = not isPlayer end
+        local function onSide(b)
+          if b ~= self.player2 and b ~= self.enemy2 then return nil end
+          if (b == self.player2) == (isPlayer == true) then return b end
+          return nil
+        end
+        -- the attacker's own side prefers the acting user; the far
+        -- side prefers the action's target
+        local hit = onSide(self.__dbActingUser)
+          or onSide(self.__dbActingTarget)
+        if hit then return hit end
+        return origFxBattler(self, flipped)
       end
     end
 
@@ -745,6 +977,7 @@ return function(mod)
     battle.resolveTurn = function(self, playerAction)
       -- a lingering aim swap must never leak into turn logic
       if self.__dbAimSwapped then self:__dbAimReset() end
+      if self.__dbSwitchSwapped then self:__dbSwitchReset() end
       -- both foes up and a move picked: ask which one to aim at
       -- (update/overlay decorations own the db_target phase)
       if playerAction and playerAction.id and not self.__dbTarget
@@ -759,14 +992,28 @@ return function(mod)
       self.__dbTarget = nil
 
       if alive(self.player2) and not self.__dbSlotA then
-        -- pass A banked; the partner picks next
-        self.__dbSlotA = { user = self.player, action = playerAction,
-                           target = chosen }
-        self.player, self.player2 = self.player2, self.player
-        self.__dbSwapped = true
-        self:syncSides()
-        self.phase = "menu"
-        return
+        local forced = self.__dbForcedB
+        self.__dbForcedB = nil
+        if forced and forced.user ~= self.player2 then
+          mod.log:warn("stale partner recall dropped: the slot moved on")
+        end
+        if forced and forced.user == self.player2 then
+          -- the partner's recall was chosen during pass A: its action
+          -- is spoken for, so there is no second menu pass
+          self.__dbSlotA = { user = self.player, action = playerAction,
+                             target = chosen }
+          self.__dbSlotB = { user = forced.user,
+                             action = { dbSwitch = forced.mon } }
+        else
+          -- pass A banked; the partner picks next
+          self.__dbSlotA = { user = self.player, action = playerAction,
+                             target = chosen }
+          self.player, self.player2 = self.player2, self.player
+          self.__dbSwapped = true
+          self:syncSides()
+          self.phase = "menu"
+          return
+        end
       end
 
       local slotA = self.__dbSlotA
@@ -779,6 +1026,8 @@ return function(mod)
         self.__dbSwapped = false
         self:syncSides()
       end
+      slotB = slotB or self.__dbSlotB
+      self.__dbSlotB = nil
 
       local Runtime = require("src.mods.Runtime")
       local TurnOrder = require("src.battle.TurnOrder")
@@ -849,13 +1098,24 @@ return function(mod)
                                   target = e2Target }
       end
 
-      -- insertion sort on the engine comparator keeps its tie rules
-      local ordered = {}
+      -- switches resolve before anything moves (gen 1's own free-hit
+      -- order); the rest gets the engine comparator's speed and ties
+      local ordered, movers = {}, {}
       for _, entry in ipairs(entries) do
+        if entry.action and entry.action.dbSwitch then
+          ordered[#ordered + 1] = entry
+        else
+          movers[#movers + 1] = entry
+        end
+      end
+      for _, entry in ipairs(movers) do
         local at = #ordered + 1
         for i, other in ipairs(ordered) do
-          if TurnOrder.firstMover(entry.user, mv(entry.action),
-                                  other.user, mv(other.action), self.rng) then
+          if other.action and other.action.dbSwitch then
+            -- switches keep the front of the queue
+          elseif TurnOrder.firstMover(entry.user, mv(entry.action),
+                                      other.user, mv(other.action),
+                                      self.rng) then
             at = i
             break
           end
@@ -871,7 +1131,22 @@ return function(mod)
         self:act(function()
           local user = entry.user
           if not alive(user) then return end
+          if entry.action and entry.action.dbSwitch then
+            self.__dbAnimShift = self:__dbShiftFor(user, nil)
+            self.__dbActingUser = user
+            self.__dbActingTarget = nil
+            self.__dbFocus = (user == self.player2) and self.player2
+              or nil
+            self:__dbExecuteSwitch(user, entry.action.dbSwitch)
+            return
+          end
           local target = entry.target
+          -- a switch earlier this turn may have withdrawn the body this
+          -- entry was aimed at; the hit follows the replacement
+          while target and self.__dbReplaced
+                and self.__dbReplaced[target] do
+            target = self.__dbReplaced[target]
+          end
           local onMySide = (user == self.player or user == self.player2)
           if not alive(target) then
             if onMySide then
@@ -884,6 +1159,8 @@ return function(mod)
           -- the shift holds until the next action's act overwrites it,
           -- which is exactly the lifetime of this action's animations
           self.__dbAnimShift = self:__dbShiftFor(user, target)
+          self.__dbActingUser = user
+          self.__dbActingTarget = target
           self.__dbFocus = (target == self.enemy2 or user == self.enemy2)
               and self.enemy2
             or (target == self.player2 or user == self.player2)
@@ -911,6 +1188,8 @@ return function(mod)
       self:act(function()
         self.__dbAnimShift = nil
         self.__dbFocus = nil
+        self.__dbActingUser = nil
+        self.__dbActingTarget = nil
         self:endOfTurn()
       end)
     end
@@ -988,6 +1267,10 @@ return function(mod)
         self:partnerResidual(self.enemy2)
         self:partnerResidual(self.player2)
       end
+      -- a recall that never executed (a failed RUN took the turn) and
+      -- the withdrawn-body map both expire at the turn boundary
+      self.__dbForcedB = nil
+      self.__dbReplaced = nil
     end
 
     -- no aiming a ball with two wild Pokémon up: the throw wastes the
@@ -1011,8 +1294,22 @@ return function(mod)
          and not self.__dbSwapped then
         self.__dbSlotA = nil
       end
+      if self.phase == "db_switch_target" then
+        local input = self.game.input
+        if input:wasPressed("left") or input:wasPressed("right") then
+          self:__dbSwitchAimAt(self.player2)
+        elseif input:wasPressed("a") then
+          self:__dbSwitchConfirm()
+        elseif input:wasPressed("b") then
+          self:__dbSwitchReset()
+          self.__dbSwitchMon = nil
+          self.phase = "menu"
+        end
+        return
+      end
       if self.phase ~= "db_target" then
         if self.__dbAimSwapped then self:__dbAimReset() end
+        if self.__dbSwitchSwapped then self:__dbSwitchReset() end
         return origUpdate(self, dt)
       end
       local input = self.game.input
@@ -1156,7 +1453,9 @@ return function(mod)
     -- partners draw in the pics layer; the overlay only carries the
     -- blinking aim frame, placed by the target's sticky anchor.  The
     -- vanilla HUD box follows the aim (drawHUDs borrow), so the frame
-    -- marks the sprite and the box names it.
+    -- marks the sprite and the box names it.  A scene owner draws its
+    -- own cue in its own space, so the classic-coords frame stands down.
+    if sceneActive(battle) then return end
     if battle.phase == "db_target" then
       -- the aimed foe holds the lead slot while the prompt is up; the
       -- frame still lands on its sprite because foeRect keys off the
@@ -1165,6 +1464,17 @@ return function(mod)
       if aimed and math.floor(love.timer.getTime() * 4) % 2 == 0 then
         local tx, ty, tw = foeRect(battle, aimed)
         love.graphics.setColor(1, 0.2, 0.2, 1)
+        love.graphics.rectangle("line", tx, ty, tw, tw)
+        love.graphics.setColor(1, 1, 1, 1)
+      end
+    end
+    if battle.phase == "db_switch_target" then
+      -- same cue on your own side: the frame marks the mon about to
+      -- step back for the bench pick
+      local aimed = battle.__dbSwitchAim or battle.player
+      if aimed and math.floor(love.timer.getTime() * 4) % 2 == 0 then
+        local tx, ty, tw = allyRect(battle, aimed)
+        love.graphics.setColor(0.2, 1, 0.4, 1)
         love.graphics.rectangle("line", tx, ty, tw, tw)
         love.graphics.setColor(1, 1, 1, 1)
       end
@@ -1185,22 +1495,37 @@ return function(mod)
   mod.hooks:wrap("input.pointer", function(next, game, ev)
     if not (ev and ev.phase == "pressed") then return next(game, ev) end
     local st = game.stack and game.stack.top and game.stack:top()
-    if not (st and st.__double and st.phase == "db_target") then
-      return next(game, ev)
-    end
+    local aiming = st and st.__double
+      and (st.phase == "db_target" or st.phase == "db_switch_target")
+    if not aiming then return next(game, ev) end
     local vp = lastViewport
     if not (vp and vp.scale and vp.scale > 0) then return next(game, ev) end
     local nx = (ev.x - (vp.gameX or 0)) / vp.scale
     local ny = (ev.y - (vp.gameY or 0)) / vp.scale
-    local function inside(b)
+    local function inside(b, rect)
       if not alive(b) then return false end
-      local x, y, w = foeRect(st, b)
+      local x, y, w = rect(st, b)
       return nx >= x and nx <= x + w and ny >= y and ny <= y + w
     end
+    if st.phase == "db_switch_target" then
+      local hitB
+      if inside(st.player, allyRect) then
+        hitB = st.player
+      elseif inside(st.player2, allyRect) then
+        hitB = st.player2
+      end
+      if not hitB then return next(game, ev) end
+      if hitB == st.__dbSwitchAim then
+        st:__dbSwitchConfirm()
+      else
+        st:__dbSwitchAimAt(hitB)
+      end
+      return true
+    end
     local hitB
-    if inside(st.enemy) then
+    if inside(st.enemy, foeRect) then
       hitB = st.enemy
-    elseif inside(st.enemy2) then
+    elseif inside(st.enemy2, foeRect) then
       hitB = st.enemy2
     end
     if not hitB then return next(game, ev) end
@@ -1244,11 +1569,38 @@ return function(mod)
     p.push(p.battle)
   end)
 
+  -- the Dramatic Shape adapter teaches its 3D billboards and HUD
+  -- texture about our second battlers; loaded lazily so a missing or
+  -- disabled voxel mod costs nothing
+  local sceneAdapter
+  local function loadSceneAdapter()
+    if sceneAdapter ~= nil then return sceneAdapter end
+    sceneAdapter = false
+    local src = mod:read("lib/dramatic_shape.lua")
+    if not src then return false end
+    local ok, factory = pcall(function()
+      return assert((loadstring or load)(src,
+        "@double_battles/lib/dramatic_shape.lua"))()
+    end)
+    if ok and type(factory) == "function" then
+      local okA, adapter = pcall(factory,
+        { log = mod.log, alive = alive })
+      if okA and type(adapter) == "table" then sceneAdapter = adapter end
+    end
+    if sceneAdapter == false then
+      mod.log:warn("dramatic shape adapter failed to load; "
+        .. "3D doubles fall back to the single-mon scene")
+    end
+    return sceneAdapter
+  end
+
   -- our own broadcast channel: trackers see doubles without touching
   -- private fields
   mod.events:on("battle.started", function(ev)
     local b = ev and ev.battle
     if not (b and b.__double) then return end
+    local adapter = loadSceneAdapter()
+    if adapter and adapter.tryInstall then pcall(adapter.tryInstall) end
     pcall(function()
       mod.events:emit("mod.double_battles.double_started", {
         battle = b,

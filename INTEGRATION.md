@@ -154,6 +154,47 @@ interceptions do this) calls `exports.tagOrganic()` just before
 queueing its `start_battle`, which restores doubles eligibility for
 that battle.
 
+### Scene detectors and the presentation surface
+
+The doubles UI has two layers. The slot borrow is the universal one:
+while you aim or a partner acts, that battler occupies `battle.enemy`
+or `battle.player` for the whole frame, so any HUD that reads the lead
+slots (the classic boxes, the wide panels, gen1_modern_ui's cards,
+Dramatic Shape's HUD texture) names the right Pokémon without knowing
+doubles exist. The flat layer is ours: partner sprites drawn in the
+engine's pics layer, blinking aim frames, a rigid animation shift.
+
+A mod that stages the battlers itself (a 3D scene, a cinematic
+renderer) should register a scene detector so the flat layer stands
+down while its scene is up:
+
+```lua
+local db = mod.find("double_battles")
+if db then
+  db.exports.registerSceneDetector({
+    id = "my_scene",
+    active = function(battle) return battle.mySceneFlag ~= nil end,
+  })
+end
+```
+
+While any detector reports active, doubles stops drawing flat partner
+sprites and classic-coords aim frames and drops the animation shift;
+the borrow keeps working. `unregisterSceneDetector(id)` removes one.
+Dramatic Shape is detected built-in (its `battle.dramaticShapeShot`
+stamp), and ships with a deeper adapter that composes both battlers
+into its billboard textures. Camera-only mods that attach to Dramatic
+Shape's battle camera (Battle Cinematics Stadium Camera, for example)
+frame the same scene and need nothing.
+
+To render doubles natively instead, read the stable surface:
+`battle.enemy2` / `battle.player2`, `sides[n].battlers`, and each
+battler's `dbAnchor` (1 = the vanilla lead spot, 2 = the partner spot;
+sticky for the battler's life). `exports.aimedBattler(battle)` returns
+the battler under the aim cursor while a target or switch prompt is
+up, `exports.focusBattler(battle)` the partner the HUD borrow is
+following mid-action; both are nil otherwise.
+
 ### Partner sources
 
 `registerPartnerSource({ id, priority, provide })` lets a mod supply

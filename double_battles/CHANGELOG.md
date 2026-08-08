@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.2.0
+
+- 3D doubles: Dramatic Shape's battle modes now stage both Pokémon on
+  each side. The voxel mod bills each side as one card textured from a
+  160x144 canvas, so the adapter composes the pair into that canvas by
+  their sticky anchors and both stand on the arena, shadows and all.
+  The aim frame blinks on the targeted mon inside the scene, and the
+  3D HUD (rendered outside our draw-scoped borrow) follows the acting
+  partner. On the STADIUM rungs a doubled side falls back to the flat
+  cards, since the models pose one mon a side; they return when the
+  side is back down to one. Collapsed 1v1 endgames, trainer intro pics
+  and non-double battles pass through untouched, pixel for pixel.
+- Switch targeting: with your pair up, picking a bench Pokémon from
+  the party menu now asks which of yours steps back (LEFT/RIGHT, a
+  green blinking frame, A to lock, B to cancel, clicking works). The
+  recall spends the leaving Pokémon's turn, resolves before any move
+  lands (gen 1's own free-hit order), and your other Pokémon keeps its
+  pick. This also fixes real bugs: the vanilla switch flow bypassed
+  the doubles turn entirely, so the second foe skipped its move, a
+  pass-B switch left the slots permanently swapped, and a foe aiming
+  at the withdrawn Pokémon could hit its ghost. Switches now run
+  through the doubles turn, both foes act, and hits aimed at a
+  withdrawn body follow the replacement in.
+- Attacks come from the right Pokémon: the engine resolves attack pic
+  effects (the lunge, DIG's hide, the hit blink) from a side flag that
+  always landed on the slot lead, so a partner's attack visibly played
+  on the lead. The resolution now follows the battler the action
+  actually involves, on both sides.
+- Animations no longer shift sideways in 3D: the classic partner
+  offset pointed the wrong way once the anim frame was remapped onto
+  the arena axis. In a 3D scene the shift stands down and the burst
+  plays at the pair's cell.
+- For UI and scene mods (see INTEGRATION.md): scene detectors let a
+  mod that stages the battlers itself tell doubles to stand its flat
+  drawing down (`registerSceneDetector`), and `aimedBattler` /
+  `focusBattler` expose what the prompts and the HUD borrow are
+  showing. Camera-only mods riding Dramatic Shape's battle camera need
+  nothing.
+
 ## 0.1.0
 
 - Known limitation, stated up front: 3D battle modes (Dramatic Shape's
