@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- Trainer pair sources: `registerTrainerPairSource` lets a mod put a
+  second trainer beside an organically started one, turning a vanilla
+  sight-line battle into a full trainer pair (each slot backed by its
+  own trainer's bench, both payouts honored). This is the seam for
+  gen 4 style "two trainers turn at once" moments: an NPC mod decides
+  when, this mod does the rest. A refused trainer class falls back to
+  the ordinary trainer double.
+
 ## 0.3.0
 
 - Battle Art support: the 3D adapter now finds ANY enabled voxel-family

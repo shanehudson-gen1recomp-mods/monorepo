@@ -213,6 +213,21 @@ and list. Default priority is 75. `unregisterPartnerSource(id)`
 removes one. Wilds of Kanto could register its visible ground mons
 here, for example. The flock sources both sky mods register sit at 40.
 
+### Trainer pair sources
+
+`registerTrainerPairSource({ id, priority, provide })` puts a second
+trainer beside an organically started one: when a vanilla trainer
+battle (a sight line, a talked-to NPC) passes through the push seam,
+`provide(game, battle)` may return `oppClassB, partyIndexB` and the
+battle becomes a full trainer pair, each slot backed by its own
+trainer's bench, both payouts honored. Return nil to pass; a class the
+engine refuses falls back to the ordinary trainer double. Firing is
+the source mod's deliberate choice, so the TRAINER 2V2 option does not
+gate it -- an NPC mod staging a gen 4 style "two trainers turn at
+once" moment decides its own conditions. Staged pairs by command or
+export (`startTrainerPair`) are unchanged.
+`unregisterTrainerPairSource(id)` removes one.
+
 ### Ally sources and vetoes
 
 `registerAllySource({ id, priority, provide })` picks WHICH of your

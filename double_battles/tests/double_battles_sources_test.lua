@@ -107,5 +107,30 @@ decorateHook(fakeOw, b6)
 T.eq(b6.player2.mon, party[2], "the lead cannot be its own partner")
 api.unregisterAllySource("test_lead")
 
+-- ------- trainer pair sources
+
+T.eq(select(1, api.registerTrainerPairSource({ id = "x" })), false,
+  "pair source needs provide")
+T.eq(api.registerTrainerPairSource({
+  id = "test_ambush", priority = 10,
+  provide = function() return "OPP_LASS", 1 end,
+}), true, "pair source registers")
+local tb = BattleState.newTrainer(fakeGame, "OPP_BUG_CATCHER", 1)
+T.check(tb and not tb.dead, "trainer battle built")
+decorateHook(fakeOw, tb)
+T.check(tb.__double, "the organic trainer battle became a pair")
+T.check(tb.__dbSideB ~= nil, "with a second trainer backing slot 2")
+api.unregisterTrainerPairSource("test_ambush")
+
+-- a refused class falls back to the ordinary trainer double
+T.eq(api.registerTrainerPairSource({
+  id = "test_broken", priority = 10,
+  provide = function() return "OPP_NOBODY", 1 end,
+}), true, "broken pair source registered")
+local tb2 = BattleState.newTrainer(fakeGame, "OPP_BUG_CATCHER", 1)
+T.check(tb2 and not tb2.dead, "second trainer battle built")
+decorateHook(fakeOw, tb2)
+T.check(tb2.__dbSideB == nil, "a refused class adds no phantom trainer")
+
 run.release()
 T.finish("double_battles_sources")

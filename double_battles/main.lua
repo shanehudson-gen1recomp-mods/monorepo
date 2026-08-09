@@ -136,6 +136,43 @@ return function(mod)
     end
   end
 
+  -- trainer pair sources: a mod can put a second trainer beside an
+  -- organically started one (two sight lines crossing at once, an
+  -- ambush NPC).  provide(game, battle) returns oppClassB, partyIndexB
+  -- or nil to pass; the battle becomes a full trainer pair, each slot
+  -- backed by its own trainer's bench.  Firing is the source mod's
+  -- deliberate choice, so the TRAINER 2V2 option does not gate it.
+  local pairSources = {}
+  mod.exports.unregisterTrainerPairSource = function(id)
+    for i = #pairSources, 1, -1 do
+      if pairSources[i].id == id then
+        table.remove(pairSources, i)
+        return true
+      end
+    end
+    return false
+  end
+  mod.exports.registerTrainerPairSource = function(source)
+    if type(source) ~= "table" or type(source.provide) ~= "function"
+       or source.id == nil then
+      return false, "source with id and provide required"
+    end
+    mod.exports.unregisterTrainerPairSource(source.id)
+    source.priority = tonumber(source.priority) or 75
+    table.insert(pairSources, source)
+    table.sort(pairSources, function(a, b)
+      return a.priority < b.priority
+    end)
+    return true
+  end
+  local function providerPair(game, battle)
+    for _, src in ipairs(pairSources) do
+      local ok, opp, idx = pcall(src.provide, game, battle)
+      if ok and opp then return opp, idx end
+    end
+    return nil
+  end
+
   -- doubles vetoes: a mod can keep specific wild encounters strictly
   -- 1v1 (wild_skies uses this for its legendary sightings, where a
   -- partner would spoil the catch).  veto(game, battle) returns true
@@ -1832,7 +1869,16 @@ return function(mod)
       local Game = require("src.core.Game")
       if battle and battle.kind == "trainer" and not battle.__double
          and not battle.dead then
-        decorateTrainer(Game, battle)
+        -- a registered pair source gets first refusal: a second
+        -- trainer joining beats the same trainer sending two.  A
+        -- refused class falls back to the ordinary trainer double.
+        local oppB, idxB = providerPair(Game, battle)
+        if oppB then
+          decoratePair(Game, battle, oppB, idxB)
+        end
+        if not battle.__double then
+          decorateTrainer(Game, battle)
+        end
         return false
       end
       if not (battle and battle.kind == "wild" and not battle.__double
