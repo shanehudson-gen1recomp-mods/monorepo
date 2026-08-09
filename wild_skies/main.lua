@@ -144,11 +144,19 @@ return function(mod)
   -- seen before anything may collide with it.  Only BOLD birds answer:
   -- with a heavy sky most flyers are scenery that scatters rather than
   -- battles, or every low pass would drag the player into a fight
+  -- past a map edge a flyer is sky dressing over the neighbor strip:
+  -- no battle seam may reach it until the carry rebases it in-bounds
+  local function inOwnMap(f)
+    return f.cellX >= 0 and f.cellY >= 0
+      and f.cellX * 16 < (f.mapW or 0) and f.cellY * 16 < (f.mapH or 0)
+  end
+
   local function flyerNear(cellX, cellY, radius)
     if battleRest > 0 then return nil end
     radius = radius or 1
     for _, f in ipairs(flyers) do
       if not f.dead and f.bold and f.t >= 0.75 and not f.summonId
+         and inOwnMap(f)
          and math.abs(f.cellX - cellX) + math.abs(f.cellY - cellY) <= radius then
         return f
       end
@@ -198,7 +206,7 @@ return function(mod)
     local best, bestD
     for _, f in ipairs(flyers) do
       if not f.dead and f.bold and f.t >= 0.75 and not f.summonId
-         and not ULTRA_SET[f.species] then
+         and inOwnMap(f) and not ULTRA_SET[f.species] then
         local d = math.abs(f.cellX - cellX) + math.abs(f.cellY - cellY)
         if d <= radius and (not bestD or d < bestD) then
           best, bestD = f, d
@@ -597,6 +605,30 @@ return function(mod)
     return nil
   end
 
+  -- edges are not cliffs: seamless connections render the neighbor
+  -- strip, so a bird crossing the boundary keeps flying and only
+  -- despawns off-camera (margin matches leave mode) or after a long
+  -- out-of-bounds stay the view never releases
+  local function offView(ow, px, py, margin)
+    local Game = require("src.core.Game")
+    local cam = ow.camera
+    local vw, vh = Game.renderer:worldViewSize()
+    margin = margin or 48
+    return px < cam.x - margin or px > cam.x + vw + margin
+        or py < cam.y - margin or py > cam.y + vh + margin
+  end
+
+  function Flyer:edgeCheck(ow, dt)
+    if ow.map:inBounds(self.cellX, self.cellY) then
+      self.oobT = nil
+      return
+    end
+    self.oobT = (self.oobT or 0) + dt
+    if offView(ow, self.px, self.py, 48) or self.oobT > 20 then
+      self.dead = true
+    end
+  end
+
   function Flyer:tick(ow, dt)
     self.t = self.t + dt
     local p = ow.player
@@ -704,9 +736,7 @@ return function(mod)
         self.alt = math.min(self.altTarget, self.alt + CLIMB * dt)
         self.cellX = math.floor((self.px + 8) / 16)
         self.cellY = math.floor((self.py + 8) / 16)
-        if not ow.map:inBounds(self.cellX, self.cellY) then
-          self.dead = true
-        end
+        self:edgeCheck(ow, dt)
         return
       end
       -- wander: capped-turn jitter, then the flock pull and the leash
@@ -760,9 +790,7 @@ return function(mod)
 
     self.cellX = math.floor((self.px + 8) / 16)
     self.cellY = math.floor((self.py + 8) / 16)
-    if not ow.map:inBounds(self.cellX, self.cellY) then
-      self.dead = true
-    end
+    self:edgeCheck(ow, dt)
   end
 
   -- the voxel pipeline live?  a rooftop percher then carries its roof
