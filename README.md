@@ -1,8 +1,9 @@
 # gen1recomp-mods
 
-Two mods for [gen1recomp](https://github.com/bryanthaboi/gen1recomp)
-that put Pokémon in the sky, plus a developer tool. The sky mods work
-alone, but they're built to be used together.
+Three mods for [gen1recomp](https://github.com/bryanthaboi/gen1recomp):
+two that put Pokémon in the sky and one that makes battles two-on-one,
+plus a developer tool. Each works alone, but they're built to be used
+together.
 
 <p>
 <a href="https://www.loom.com/share/5867c264456040c8a37acc7e32f4c827"><img src=".github/free_fly-demo.gif" width="49%" alt="free_fly demo"></a>
@@ -24,6 +25,13 @@ table cross the overworld with shadows and flapping wings. They land,
 rest, take off, and flush when you run at them; the Zubat line comes out
 at night; sea routes get birds of their own. Low flyers can be caught
 from the ground, high ones are scenery.
+
+**[double_battles](double_battles/)**: wild and trainer battles against
+two Pokémon at once: 1v2, full 2v2, trainer doubles and two-trainer
+pairs, in the classic layout, the wide layout and Dramatic Shape's 3D
+battle modes. Aim your moves and balls at either foe. With wild_skies
+installed, a wild double can recruit a bird you can see flying nearby
+as the second foe.
 
 **Together**: the sky wild_skies fills becomes somewhere free_fly can
 hunt. Fly into a passing Pidgey and its battle starts mid-air, with the
@@ -51,6 +59,7 @@ updating. Each release ships one `<mod>-<version>.zip`; grab the newest.
 | --- | --- | --- |
 | Free Fly | [`free_fly`](https://github.com/shanehudson-gen1recomp-mods/free_fly) | [Releases](https://github.com/shanehudson-gen1recomp-mods/free_fly/releases/latest) |
 | Wild Skies | [`wild_skies`](https://github.com/shanehudson-gen1recomp-mods/wild_skies) | [Releases](https://github.com/shanehudson-gen1recomp-mods/wild_skies/releases/latest) |
+| Double Battles | [`double_battles`](https://github.com/shanehudson-gen1recomp-mods/double_battles) | [Releases](https://github.com/shanehudson-gen1recomp-mods/double_battles/releases/latest) |
 | Dev Hook Inspector (dev tool) | [`dev-hook-inspector`](https://github.com/shanehudson-gen1recomp-mods/dev-hook-inspector) | [Releases](https://github.com/shanehudson-gen1recomp-mods/dev-hook-inspector/releases/latest) |
 
 Then, in the game:

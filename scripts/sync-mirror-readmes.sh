@@ -21,15 +21,37 @@ done <<< "$(git -C "$ROOT" ls-files '*/manifest.json')"
 # left off the other mirrors' listings, the org profile, and any other
 # public directory until it graduates. Its own mirror README still
 # renders (without the family listing).
-UNLISTED=("double_battles")
+UNLISTED=()
 
 is_unlisted() {
   local candidate="$1"
+  [ ${#UNLISTED[@]} -eq 0 ] && return 1
   for u in "${UNLISTED[@]}"; do
     [ "$u" = "$candidate" ] && return 0
   done
   return 1
 }
+
+# Dev tools sort below the gameplay mods in every listing: someone
+# scanning a directory should hit the player-facing mods first.
+DEV_TOOLS=("dev-hook-inspector")
+
+is_dev_tool() {
+  local candidate="$1"
+  for d in "${DEV_TOOLS[@]}"; do
+    [ "$d" = "$candidate" ] && return 0
+  done
+  return 1
+}
+
+ordered=()
+for m in "${mods[@]}"; do
+  if ! is_dev_tool "$m"; then ordered+=("$m"); fi
+done
+for m in "${mods[@]}"; do
+  if is_dev_tool "$m"; then ordered+=("$m"); fi
+done
+mods=("${ordered[@]}")
 
 name_of() {
   python3 -c "import json;print(json.load(open('$ROOT/$1/manifest.json')).get('name','$1'))"
