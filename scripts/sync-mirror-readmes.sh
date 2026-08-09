@@ -86,6 +86,17 @@ $listing"
   # and the family points at nothing here.
   if is_unlisted "$mod"; then family=""; fi
 
+  # Mods and versions this one was actually run alongside, kept as a
+  # tracked TESTED.md ledger in the mod's directory and updated as we
+  # test. Rendered verbatim, same contract as MIRROR.md below.
+  tested=""
+  if git -C "$ROOT" ls-files --error-unmatch "$mod/TESTED.md" >/dev/null 2>&1; then
+    tested="## Tested alongside
+
+$(cat "$ROOT/$mod/TESTED.md")
+"
+  fi
+
   # What the mod is: the manifest description, or the longer
   # what-and-why from a tracked MIRROR.md in the mod's directory when
   # one exists.
@@ -104,6 +115,7 @@ Grab the newest \`.zip\` from [Releases](https://github.com/$ORG/$mod/releases) 
 
 Source code and issues live in the [mods monorepo](https://github.com/$ORG/monorepo); this repo only hosts releases.
 
+$tested
 $family"
   # Command substitution strips trailing newlines when reading the remote
   # copy back, so strip them here too or the comparison never matches.
