@@ -36,6 +36,12 @@
   keeps ground rules), and one that lands mid-fence gets reseeded
   behind the player by the engine itself. Declaring
   `freeFlyAware = true` still turns all of this off.
+- Voxel first/third-person flight works in forks too: the airborne
+  collision pass-through for FreeMove was keyed to one mod's exports,
+  so a fork shipping its own copy (Battle Art's voxel fork) kept
+  ground collision while flying and the player snagged on fences. Any
+  loaded mod whose exported lib serves a FreeMove module now gets the
+  same scoped permissive window.
 - Assisted landings no longer trust a facade scan from a bad frame: a
   tower-footprint scan that failed (mid-transition) was cached for the
   whole map visit with no facades in it, so a landing could set down

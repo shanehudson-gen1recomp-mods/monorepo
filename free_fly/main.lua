@@ -2048,39 +2048,45 @@ return function(mod)
       return r
     end
 
-    -- DRAMATIC_SHAPE's first/third-person FreeMove does its own collision
+    -- Voxel-style first/third-person FreeMove (DRAMATIC_SHAPE and its
+    -- forks, e.g. Battle Art's) does its own collision
     -- (Map:isWalkableCell + Collision.occupied directly, never
     -- Collision.canMove), so the airborne pass-through above never
-    -- reaches it.  Wrapping its tick opens a permissive window scoped to
-    -- exactly that call while the player flies.
+    -- reaches it.  Any loaded mod exporting a lib that serves a
+    -- FreeMove module gets its tick wrapped, opening a permissive
+    -- window scoped to exactly that call while the player flies.
     do
-      local exports = Game.mods and Game.mods.exports
-      local V = exports and exports.DRAMATIC_SHAPE and exports.DRAMATIC_SHAPE.lib
-      local okFM, FreeMove = pcall(function() return V and V.require("FreeMove") end)
-      if okFM and FreeMove and FreeMove.tick then
-        if not MapMod.__freeFlyWalkWrapped then
-          MapMod.__freeFlyWalkWrapped = true
-          local origWalkable = MapMod.isWalkableCell
-          MapMod.isWalkableCell = function(self, cx, cy)
-            if MapMod.__freeFlyPermissive then return self:inBounds(cx, cy) end
-            return origWalkable(self, cx, cy)
+      local declared = Game.mods and Game.mods.exports or {}
+      for _, ex in pairs(declared) do
+        local V = type(ex) == "table" and ex.lib or nil
+        local okFM, FreeMove = pcall(function()
+          return V and V.require and V.require("FreeMove") or nil
+        end)
+        if okFM and FreeMove and FreeMove.tick then
+          if not MapMod.__freeFlyWalkWrapped then
+            MapMod.__freeFlyWalkWrapped = true
+            local origWalkable = MapMod.isWalkableCell
+            MapMod.isWalkableCell = function(self, cx, cy)
+              if MapMod.__freeFlyPermissive then return self:inBounds(cx, cy) end
+              return origWalkable(self, cx, cy)
+            end
+            local origOccupied = Collision.occupied
+            Collision.occupied = function(...)
+              if MapMod.__freeFlyPermissive then return false end
+              return origOccupied(...)
+            end
           end
-          local origOccupied = Collision.occupied
-          Collision.occupied = function(...)
-            if MapMod.__freeFlyPermissive then return false end
-            return origOccupied(...)
-          end
-        end
-        if not FreeMove.__freeFlyWrapped then
-          FreeMove.__freeFlyWrapped = true
-          local origTick = FreeMove.tick
-          FreeMove.tick = function(fmState, ...)
-            local p = fmState and fmState.player
-            if not (p and p.freeFlying) then return origTick(fmState, ...) end
-            MapMod.__freeFlyPermissive = true
-            local ok, err = pcall(origTick, fmState, ...)
-            MapMod.__freeFlyPermissive = false
-            if not ok then error(err, 0) end
+          if not FreeMove.__freeFlyWrapped then
+            FreeMove.__freeFlyWrapped = true
+            local origTick = FreeMove.tick
+            FreeMove.tick = function(fmState, ...)
+              local p = fmState and fmState.player
+              if not (p and p.freeFlying) then return origTick(fmState, ...) end
+              MapMod.__freeFlyPermissive = true
+              local ok, err = pcall(origTick, fmState, ...)
+              MapMod.__freeFlyPermissive = false
+              if not ok then error(err, 0) end
+            end
           end
         end
       end
