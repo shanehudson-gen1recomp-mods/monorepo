@@ -1,7 +1,7 @@
 {
   "id": "wild_skies",
   "name": "Wild Skies",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "entry": "main.lua",
   "api": 2,
   "category": "MECHANIC",
@@ -13,6 +13,6 @@
     "engine_internals"
   ],
   "game_version": "0.0.0-dev || >=0.1.0 <2.0.0",
-  "description": "Ambient flying Pokémon from the local encounter table roam the sky in loose flocks, resting on streets and rooftops.",
+  "description": "Ambient flying Pok\u00e9mon from the local encounter table roam the sky in loose flocks, resting on streets and rooftops.",
   "github": "shanehudson-gen1recomp-mods/wild_skies"
 }

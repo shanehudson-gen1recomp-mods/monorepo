@@ -213,13 +213,23 @@ end
 -- One shared self-healing wrap over the overworld update for the whole
 -- mod family.  Foreign mods (wilds of kanto's follower engine) restore
 -- OC.update wholesale from a snapshot taken before we wrapped it, which
--- silently drops our per-frame ticks; the draw pass plays watchdog and
--- re-wraps whatever update is current whenever the tag goes missing.
--- The tag, flag and key list are shared by every mod that calls this,
--- so two sky mods never mistake each other's wrap for a foreign one and
--- fight over the top of the chain.  Each mod registers the OC key its
--- tick lives at; the wrap dispatches to whatever keys are present.
-function Sky.ensureUpdateWrap(OC, tickKey)
+-- silently drops our per-frame ticks; the render.compose hook chain
+-- plays watchdog and re-wraps whatever update is current whenever the
+-- tag goes missing.  The tag, flag and key list are shared by every mod
+-- that calls this, so two sky mods never mistake each other's wrap for
+-- a foreign one and fight over the top of the chain.  Each mod
+-- registers the OC key its tick lives at; the wrap dispatches to
+-- whatever keys are present.
+--
+-- The watchdog deliberately does NOT touch OC.draw: gen1_modern_ui
+-- fingerprints the overworld's shipped draw renderer (rawget compare)
+-- and downgrades every menu to classic for the session when the slot
+-- holds anything else.  render.compose is a proper engine hook chain,
+-- fires every composed frame (battles and menus included), and cannot
+-- be amputated by a foreign snapshot restore, so it heals strictly
+-- better than the draw wrap it replaces.
+local composeHooked = false
+function Sky.ensureUpdateWrap(OC, tickKey, hooks)
   local keys = OC.__skyTickKeys or {}
   OC.__skyTickKeys = keys
   if tickKey then
@@ -267,14 +277,24 @@ function Sky.ensureUpdateWrap(OC, tickKey)
   end
   OC.__skyEnsureUpdateWrap()
 
-  if not OC.__skyDrawWrapped then
-    OC.__skyDrawWrapped = true
-    local origDraw = OC.draw
-    OC.draw = function(self, ...)
-      local ensure = OC.__skyEnsureUpdateWrap
-      if ensure then ensure() end
-      if origDraw then return origDraw(self, ...) end
-    end
+  -- claim the pre-fix flag so an older sibling's skylib (free_fly
+  -- <=1.5.1 / wild_skies <=1.6.1) skips its OC.draw wrap when a newer
+  -- family mod loaded first; a stale wrap from an old copy that ran
+  -- earlier can't be unwound (its original draw is private to the
+  -- closure), so mixed versions need the older mod updated too
+  OC.__skyDrawWrapped = true
+
+  if hooks and not composeHooked then
+    composeHooked = true
+    -- pcall: an engine old enough to lack the render.compose chain
+    -- just loses the watchdog, never the tick (1.6.0-level behavior)
+    pcall(function()
+      hooks:wrap("render.compose", function(nextFn, ...)
+        local ensure = OC.__skyEnsureUpdateWrap
+        if ensure then ensure() end
+        return nextFn(...)
+      end)
+    end)
   end
 end
 

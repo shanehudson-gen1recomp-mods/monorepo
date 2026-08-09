@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.2
+
+- Gen1 Modern UI works again alongside this mod. That mod checks that
+  the overworld's draw function is still the engine's own before it
+  lays its modern menus over the world, and 1.5.1's self-heal watchdog
+  wrapped exactly that function, so every menu quietly fell back to the
+  classic look. The watchdog now rides the engine's render.compose hook
+  chain instead: same healing (better, actually, since it also runs
+  during battles and menus), and the overworld's draw is never touched.
+  wild_skies 1.6.2 carries the same fix; if both are installed, update
+  both, since either one's older copy re-installs the old wrap.
+
 ## 1.5.1
 
 - New SIZE option (SMALL / NORMAL / LARGE / HUGE) for the mon carrying

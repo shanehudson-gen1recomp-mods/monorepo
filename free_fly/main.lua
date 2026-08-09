@@ -1600,7 +1600,7 @@ return function(mod)
     -- the shared self-healing wrap: survives wilds of kanto's follower
     -- engine restoring OC.update from a pre-wrap snapshot, and shares
     -- one tag with wild_skies so the two watchdogs never fight
-    Sky.ensureUpdateWrap(OC, "__freeFlyTick")
+    Sky.ensureUpdateWrap(OC, "__freeFlyTick", mod.hooks)
 
     if not OC.__freeFlyWrapped then
       OC.__freeFlyWrapped = true

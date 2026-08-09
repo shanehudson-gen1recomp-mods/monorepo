@@ -1099,7 +1099,7 @@ return function(mod)
       if OC.__skyTicking then return end
       return skyTick(ow, dt)
     end
-    Sky.ensureUpdateWrap(OC, "__wildSkiesTick")
+    Sky.ensureUpdateWrap(OC, "__wildSkiesTick", mod.hooks)
 
     -- birds survive seamless connection crossings: translate them by the
     -- same coordinate rebase the player gets, and re-attach them to the
