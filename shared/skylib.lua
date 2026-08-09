@@ -210,4 +210,72 @@ function Sky.knowsMove(mon, moveId)
   return false
 end
 
+-- One shared self-healing wrap over the overworld update for the whole
+-- mod family.  Foreign mods (wilds of kanto's follower engine) restore
+-- OC.update wholesale from a snapshot taken before we wrapped it, which
+-- silently drops our per-frame ticks; the draw pass plays watchdog and
+-- re-wraps whatever update is current whenever the tag goes missing.
+-- The tag, flag and key list are shared by every mod that calls this,
+-- so two sky mods never mistake each other's wrap for a foreign one and
+-- fight over the top of the chain.  Each mod registers the OC key its
+-- tick lives at; the wrap dispatches to whatever keys are present.
+function Sky.ensureUpdateWrap(OC, tickKey)
+  local keys = OC.__skyTickKeys or {}
+  OC.__skyTickKeys = keys
+  if tickKey then
+    for _, k in ipairs(keys) do
+      if k == tickKey then tickKey = nil; break end
+    end
+    if tickKey then keys[#keys + 1] = tickKey end
+  end
+
+  OC.__skyEnsureUpdateWrap = function()
+    if OC.update == OC.__skyUpdateWrap then return end
+    -- a tagged wrap existing but not installed means another mod
+    -- replaced the update slot; say so, so player logs name the culprit
+    -- class instead of showing silently missing features
+    if OC.__skyUpdateWrap then
+      print("[sky] overworld update hook was replaced by another mod; re-arming")
+    end
+    local orig = OC.update
+    local function wrap(self, dt)
+      -- an outer copy of this wrap is mid-frame (a foreign restore can
+      -- resurrect an older one inside the chain): pass through and let
+      -- the outermost run the ticks exactly once
+      if OC.__skyTicking then
+        if orig then orig(self, dt) end
+        return
+      end
+      if orig then
+        OC.__skyTicking = true
+        local ok, err = pcall(orig, self, dt)
+        OC.__skyTicking = nil
+        if not ok then error(err, 0) end
+      end
+      for _, key in ipairs(OC.__skyTickKeys or {}) do
+        local tick = OC[key]
+        if tick then
+          local ok, err = pcall(tick, self, dt)
+          if not ok then
+            print("[sky] " .. key .. " failed: " .. tostring(err))
+          end
+        end
+      end
+    end
+    OC.__skyUpdateWrap = wrap
+    OC.update = wrap
+  end
+  OC.__skyEnsureUpdateWrap()
+
+  if not OC.__skyDrawWrapped then
+    OC.__skyDrawWrapped = true
+    local origDraw = OC.draw
+    OC.draw = function(self, ...)
+      local ensure = OC.__skyEnsureUpdateWrap
+      if ensure then ensure() end
+      if origDraw then return origDraw(self, ...) end
+    end
+  end
+end
+
 return Sky

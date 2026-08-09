@@ -881,7 +881,7 @@ return function(mod)
 
     local bumpCooldown = 0
 
-    OC.__wildSkiesTick = function(ow, dt)
+    local function skyTick(ow, dt)
       if not (ow and ow.map and ow.player) then return end
       dt = dt or 1 / 60
       battleRest = math.max(0, battleRest - dt)
@@ -1093,17 +1093,13 @@ return function(mod)
       end
     end
 
-    if not OC.__wildSkiesWrapped then
-      OC.__wildSkiesWrapped = true
-      local origUpdate = OC.update
-      OC.update = function(self, dt)
-        origUpdate(self, dt)
-        if OC.__wildSkiesTick then
-          local ok, err = pcall(OC.__wildSkiesTick, self, dt)
-          if not ok then print("[wild_skies] tick failed: " .. tostring(err)) end
-        end
-      end
+    -- the guard blocks pre-1.6.1 leftover wraps (a hot reload keeps
+    -- them in the chain) from double-ticking mid-frame
+    OC.__wildSkiesTick = function(ow, dt)
+      if OC.__skyTicking then return end
+      return skyTick(ow, dt)
     end
+    Sky.ensureUpdateWrap(OC, "__wildSkiesTick")
 
     -- birds survive seamless connection crossings: translate them by the
     -- same coordinate rebase the player gets, and re-attach them to the

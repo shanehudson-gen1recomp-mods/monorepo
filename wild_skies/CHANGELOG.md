@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.1
+
+- Survive foreign update-hook restores: wilds of kanto 1.12.x's
+  follower engine resets the overworld update function from a snapshot
+  taken before this mod hooked it, which silently stopped the sky tick
+  (birds vanished with no error). The hook is now tagged and re-armed
+  from the draw pass whenever it goes missing, and a re-entrancy guard
+  keeps the tick single even when a foreign restore leaves an older
+  copy of the wrap in the chain.
+- Cross-mod compatibility: the hook moved into skylib as one shared
+  wrap for the whole mod family. wild_skies 1.6.1 and free_fly 1.5.1
+  ride the same tagged wrap, so their watchdogs recognise each other
+  and never mistake a sibling for a foreign mod (separate wraps would
+  re-wrap each other every frame). Mixed versions stay safe: an
+  updated mod heals itself either way, an older sibling just keeps its
+  old single hook and misses the healing until it updates too.
+
 ## 1.6.0
 
 - Legendary sightings stay 1v1: a doubles veto keeps ARTICUNO, ZAPDOS
