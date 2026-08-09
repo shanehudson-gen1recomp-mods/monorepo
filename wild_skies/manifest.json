@@ -1,7 +1,7 @@
 {
   "id": "wild_skies",
   "name": "Wild Skies",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "entry": "main.lua",
   "api": 2,
   "category": "MECHANIC",

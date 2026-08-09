@@ -47,17 +47,36 @@ return function(mod)
     return 0
   end
 
+  -- is the player airborne right now?  ANY enabled mod that exports
+  -- isFlying answers (free_fly, Dramatic Sky Ride), with the field
+  -- free_fly stamps on the player as the last resort
+  local function airborne(game)
+    local exportsAll = game and game.mods and game.mods.exports
+    if type(exportsAll) == "table" then
+      for _, ex in pairs(exportsAll) do
+        local fn = type(ex) == "table" and ex.isFlying
+        if type(fn) == "function" then
+          local ok, v = pcall(fn)
+          if ok and v then return true end
+        end
+      end
+    end
+    local p = game and game.overworld and game.overworld.player
+    return (p and p.freeFlying) and true or false
+  end
+
   -- once the doubles roll has passed, a partner ALWAYS joins: whatever
   -- the sources and the encounter list failed to provide (slotless map,
-  -- refused species), a plain RATTATA near the lead foe's level fills
-  -- in rather than the fight quietly going 1v1
+  -- refused species), a stand-in near the lead foe's level fills in
+  -- rather than the fight quietly going 1v1.  On the ground that is a
+  -- plain RATTATA; in the air a rat cannot join, so a PIDGEY does.
   local decorateFwd
   local function ensurePartner(game, battle, sp, lv)
     if sp then decorateFwd(game, battle, sp, lv) end
     if battle.__double then return end
     local e = battle.enemy
     local base = (e and e.mon and e.mon.level) or 5
-    decorateFwd(game, battle, "RATTATA",
+    decorateFwd(game, battle, airborne(game) and "PIDGEY" or "RATTATA",
                 math.max(2, base + love.math.random(-2, 2)))
     if not battle.__double then
       mod.log:warn("doubles declined: even the fallback partner refused")
@@ -115,6 +134,77 @@ return function(mod)
         if ok and sp then return sp, lv end
       end
     end
+  end
+
+  -- doubles vetoes: a mod can keep specific wild encounters strictly
+  -- 1v1 (wild_skies uses this for its legendary sightings, where a
+  -- partner would spoil the catch).  veto(game, battle) returns true
+  -- to block the decoration; vetoes never affect trainer battles.
+  local doubleVetoes = {}
+  mod.exports.unregisterDoubleVeto = function(id)
+    for i = #doubleVetoes, 1, -1 do
+      if doubleVetoes[i].id == id then
+        table.remove(doubleVetoes, i)
+        return true
+      end
+    end
+    return false
+  end
+  mod.exports.registerDoubleVeto = function(v)
+    if type(v) ~= "table" or v.id == nil or type(v.veto) ~= "function" then
+      return false, "veto with id and veto(game, battle) required"
+    end
+    mod.exports.unregisterDoubleVeto(v.id)
+    doubleVetoes[#doubleVetoes + 1] = v
+    return true
+  end
+  local function vetoedBy(game, battle)
+    for _, v in ipairs(doubleVetoes) do
+      local ok, hit = pcall(v.veto, game, battle)
+      if ok and hit then return v.id end
+    end
+    return nil
+  end
+
+  -- ally sources: a mod can pick WHICH party mon fights beside your
+  -- lead (free_fly puts the mount there mid-air).  provide(game,
+  -- battle) returns a party mon or nil to pass; the default is the
+  -- next healthy bench mon.  The pick must be a healthy party member
+  -- that is not already the lead, or it falls through.
+  local allySources = {}
+  mod.exports.unregisterAllySource = function(id)
+    for i = #allySources, 1, -1 do
+      if allySources[i].id == id then
+        table.remove(allySources, i)
+        return true
+      end
+    end
+    return false
+  end
+  mod.exports.registerAllySource = function(source)
+    if type(source) ~= "table" or type(source.provide) ~= "function"
+       or source.id == nil then
+      return false, "source with id and provide required"
+    end
+    mod.exports.unregisterAllySource(source.id)
+    source.priority = tonumber(source.priority) or 75
+    table.insert(allySources, source)
+    table.sort(allySources, function(a, b)
+      return a.priority < b.priority
+    end)
+    return true
+  end
+  local function providerAlly(game, battle)
+    for _, src in ipairs(allySources) do
+      local ok, m = pcall(src.provide, game, battle)
+      if ok and type(m) == "table" and (m.hp or 0) > 0
+         and not (battle.player and battle.player.mon == m) then
+        for _, pm in ipairs((game.save and game.save.party) or {}) do
+          if pm == m then return m end
+        end
+      end
+    end
+    return nil
   end
 
   -- spread moves, gen 3 semantics: "foes" hits both enemies, "others"
@@ -474,7 +564,8 @@ return function(mod)
     -- your own partner: the next healthy party mon, when the option
     -- says PAIR and the bench has one to give
     if mod.options:get("your_side") ~= "solo" and battle.player then
-      local benchMon = secondHealthy(game.save, battle.player.mon)
+      local benchMon = providerAlly(game, battle)
+        or secondHealthy(game.save, battle.player.mon)
       if benchMon then
         local okP, ally = pcall(BattleState.makeBattler, game.data,
                                 benchMon, true, game.save)
@@ -1750,6 +1841,11 @@ return function(mod)
       end
       if battle.safari or battle.ghost or battle.demo then
         mod.log:info("doubles declined: special battle format")
+        return false
+      end
+      local vetoId = vetoedBy(Game, battle)
+      if vetoId then
+        mod.log:info("doubles declined: vetoed by %s", tostring(vetoId))
         return false
       end
       mod.log:info("doubles: wild battle seen (option=%s)",

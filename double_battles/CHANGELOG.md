@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0
+
+- Battle Art support: the 3D adapter now finds ANY enabled voxel-family
+  mod (Dramatic Shape, BATTLE_ART_VOXEL_FORK, future forks) by its
+  exported battle surface instead of one hard-coded id, treats the
+  Stadium module as optional (the fork has none), and passes the
+  fork's extra hudTexture arguments through. Oversized animated art
+  gets a canvas grown to fit, packed side by side; classic-sized art
+  keeps the proven fixed layout.
+- Ally sources: `registerAllySource` lets a mod pick WHICH party mon
+  fights beside your lead (free_fly puts the mount there mid-air).
+  Invalid picks fall through to the usual bench order.
+- Doubles vetoes: `registerDoubleVeto` keeps specific wild encounters
+  strictly 1v1 before any partner is rolled. wild_skies uses it for
+  its legendary sightings, where a partner (and the aimed-ball rule)
+  would spoil the catch. Vetoes never touch trainer battles or the
+  explicit start exports.
+- The last-resort stand-in matches the setting: an airborne battle's
+  fallback partner is a PIDGEY instead of a RATTATA. Airborne means
+  any enabled mod whose exports answer `isFlying()` (free_fly and
+  Dramatic Sky Ride both do), so mounted flight from either counts.
+
 ## 0.2.2
 
 - The target prompts grew a menu: a vanilla-style box in the text

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.0
+
+- Legendary sightings stay 1v1: a doubles veto keeps ARTICUNO, ZAPDOS
+  and MOLTRES encounters strictly solo, so a rolled partner (or the
+  aimed-ball rule ending the battle on a capture) can never cost you
+  the bird.
+- Bird pairs: a bumped bird now brings its flockmate. The new
+  `takeFlockmate` export hands the partner slot a second bold bird
+  through the after-battle rest (which exists to stop battles
+  chaining, not to empty the second slot of the one that already
+  started); legendaries are never flockmates. free_fly uses the same
+  export for its aerial interceptions.
+- Survivors return to the sky: a sky-sourced second foe (a summoned
+  recruit or a flockmate) that outlives an undecided battle -- you
+  ran, or caught the other one -- respawns into the air instead of
+  evaporating.
+
 ## 1.5.0
 
 - Ultra-rare sightings: 1 in 1000 spawns under an open outdoor sky is

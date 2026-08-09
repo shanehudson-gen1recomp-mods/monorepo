@@ -73,6 +73,25 @@ decorateHook(fakeOw, b3)
 T.check(b3.__double, "refused species still doubles")
 T.eq(b3.enemy2.mon.species, "RATTATA", "the stand-in RATTATA joins")
 T.check((b3.enemy2.mon.level or 0) >= 2, "at a sane level")
+
+-- airborne (any mod exporting isFlying: free_fly, Dramatic Sky Ride)
+-- the stand-in is a PIDGEY: a rat cannot join a fight in the sky
+fakeGame.mods = { exports = {
+  DRAMATIC_SKY_RIDE = { isFlying = function() return true end },
+} }
+local b4 = freshWild()
+decorateHook(fakeOw, b4)
+T.check(b4.__double, "airborne battle still doubles")
+T.eq(b4.enemy2.mon.species, "PIDGEY", "the sky stand-in is a PIDGEY")
+
+-- grounded again: back to the rat
+fakeGame.mods.exports.DRAMATIC_SKY_RIDE.isFlying = function()
+  return false
+end
+local b5 = freshWild()
+decorateHook(fakeOw, b5)
+T.eq(b5.enemy2.mon.species, "RATTATA", "grounded stand-in stays RATTATA")
+fakeGame.mods = nil
 api.unregisterPartnerSource("test_bad")
 
 run.release()

@@ -105,6 +105,10 @@ overlapping features of their own, so check their changelogs):
   against you while you fly over them; land and everything is vanilla.
 - [wild_skies](../wild_skies): ambient flying Pokémon in the sky, which
   this mod lets you intercept mid-air for a battle.
+- [double_battles](../double_battles): an intercepted bird can bring
+  its flockmate as a second foe, and in an aerial double the mon
+  carrying you is the one fighting beside your lead instead of
+  whoever sits next in the party.
 - [Quick Select](https://github.com/Roxas2712/pokemon-quick-select)
   (tested with 1.0.1): adds the FLY WHISTLE shortcut flow described
   above.

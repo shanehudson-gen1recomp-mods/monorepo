@@ -53,6 +53,11 @@ overlapping features of their own, so check their changelogs):
   altitude.
 - [free_fly](../free_fly): aerial interception; also the source of the
   mount-riding flight this mod's birds share their sky with.
+- [double_battles](../double_battles): a bumped bird brings its
+  flockmate as the second foe, a summoned bird can be recruited into a
+  wild double, and a sky bird that survives an undecided fight (you
+  ran, or caught the other one) returns visibly to the air. Legendary
+  sightings always stay 1v1, so a partner can never spoil the catch.
 
 For a full mount system (controllable flying, ground and surf mounts),
 see [Dramatic Sky Ride](https://github.com/mfrtechconsult/dramatic-sky-ride).

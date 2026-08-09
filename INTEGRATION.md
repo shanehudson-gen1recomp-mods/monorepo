@@ -86,6 +86,13 @@ spawned through `spawnFlyer` are always bold.
 despawns the flyer and hands you its identity. This is how free_fly
 turns a mid-air interception into that exact bird's battle.
 
+`exports.takeFlockmate(cellX, cellY, radius)` is takeFlyer for the
+partner slot of a battle ALREADY born from this sky: it ignores the
+after-battle rest (which exists to stop battles chaining, not to empty
+the second slot of the one that already started) and never hands over
+a legendary. Both sky mods use it to give a bumped or intercepted bird
+its flockmate as the second foe.
+
 Both calls also go quiet for about twenty five seconds after any battle
 born from this sky (a ground bump, or any consumer taking a bird), so
 heavy spawns decorate the route instead of chaining fights. Expect nil
@@ -204,7 +211,23 @@ wild_skies summoned bird sits at 50 and the encounter-list fallback at
 100, so priority below 50 beats the bird and 50-99 runs between bird
 and list. Default priority is 75. `unregisterPartnerSource(id)`
 removes one. Wilds of Kanto could register its visible ground mons
-here, for example.
+here, for example. The flock sources both sky mods register sit at 40.
+
+### Ally sources and vetoes
+
+`registerAllySource({ id, priority, provide })` picks WHICH of your
+party mons fights beside your lead when a battle doubles. `provide`
+returns a party mon object or nil to pass; a pick that is not a
+healthy non-lead party member falls through to the default (the next
+healthy bench mon). free_fly registers the mount here at priority 50,
+so mid-air your ride is the one fighting beside you.
+
+`registerDoubleVeto({ id, veto })` keeps specific wild encounters
+strictly 1v1: `veto(game, battle)` returning true blocks the
+decoration before any partner is rolled. Vetoes never affect trainer
+battles or the explicit `start*` exports. wild_skies vetoes its
+legendary sightings this way. `unregisterAllySource(id)` and
+`unregisterDoubleVeto(id)` remove one each.
 
 ### Events
 

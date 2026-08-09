@@ -108,9 +108,12 @@ return function(mod)
     { species = "ZAPDOS",   level = { 48, 52 } },
     { species = "MOLTRES",  level = { 48, 52 } },
   }
+  local ULTRA_SET = {}
+  for _, u in ipairs(ULTRA_RARES) do ULTRA_SET[u.species] = true end
 
   local flyers = {}
   local battleRest = 0
+  local lastBump = nil
   local summonFail -- forward: every summon ends in exactly one event
   local cooldown = 3
   local serial = 0
@@ -183,6 +186,39 @@ return function(mod)
       })
     end)
     return { species = f.species, level = f.level }
+  end
+
+  -- like takeFlyer, but rest-exempt and never a legendary: the partner
+  -- slot of a battle ALREADY born from this sky (a bump, an aerial
+  -- interception) recruits its flockmate here, when the ordinary
+  -- consumers are resting.  The rest exists to stop battles CHAINING,
+  -- not to empty the second slot of the one that already started.
+  mod.exports.takeFlockmate = function(cellX, cellY, radius)
+    radius = radius or 8
+    local best, bestD
+    for _, f in ipairs(flyers) do
+      if not f.dead and f.bold and f.t >= 0.75 and not f.summonId
+         and not ULTRA_SET[f.species] then
+        local d = math.abs(f.cellX - cellX) + math.abs(f.cellY - cellY)
+        if d <= radius and (not bestD or d < bestD) then
+          best, bestD = f, d
+        end
+      end
+    end
+    if not best then return nil end
+    local Game = require("src.core.Game")
+    best.dead = true
+    detach(Game and Game.overworld, best)
+    for i = #flyers, 1, -1 do
+      if flyers[i] == best then table.remove(flyers, i) end
+    end
+    pcall(function()
+      mod.events:emit("mod.wild_skies.flyer_taken", {
+        species = best.species, level = best.level,
+        cellX = best.cellX, cellY = best.cellY,
+      })
+    end)
+    return { species = best.species, level = best.level }
   end
 
   -- call a bird down: the nearest bold flyer within radius breaks off,
@@ -878,6 +914,10 @@ return function(mod)
           if okQ then
             bumpCooldown = 2
             battleRest = BATTLE_REST
+            -- the flock partner source keys off this record: the bump
+            -- battle about to start may recruit a second bird
+            lastBump = { species = f.species, level = f.level or 5,
+                         at = love.timer.getTime() }
             pcall(function()
               require("src.core.Sound").playCry(Game.data, f.species)
             end)
@@ -1097,6 +1137,83 @@ return function(mod)
         table.insert(self.entities, f)
       end
       return crossed
+    end
+  end)
+
+  -- ------- doubles integration (double_battles, when present)
+
+  -- which battles carry a partner this sky provided, and as what;
+  -- weak-keyed so an abandoned battle never pins its record
+  local skyPartner = setmetatable({}, { __mode = "k" })
+
+  mod.events:on("game.ready", function()
+    local db = mod.find("double_battles")
+    local ex = db and db.exports
+    if not ex then return end
+    -- a legendary sighting stays strictly 1v1: a partner would spoil
+    -- the catch, and the aimed-ball rule ends the battle on a capture
+    if ex.registerDoubleVeto then
+      ex.registerDoubleVeto({
+        id = "wild_skies_legendary",
+        veto = function(game, battle)
+          local e = battle and battle.enemy
+          return (e and e.mon and ULTRA_SET[e.mon.species]) and true
+            or false
+        end,
+      })
+    end
+    -- a bumped bird brings its flockmate: the second foe of a bump
+    -- battle comes from the same sky, ahead of the summoned-bird path
+    if ex.registerPartnerSource then
+      ex.registerPartnerSource({
+        id = "wild_skies_flock",
+        priority = 40,
+        provide = function(game, battle)
+          local bump = lastBump
+          if not bump then return nil end
+          if love.timer.getTime() - bump.at > 10 then return nil end
+          local e = battle and battle.enemy
+          if not (e and e.mon and e.mon.species == bump.species) then
+            return nil
+          end
+          local p = game.overworld and game.overworld.player
+          if not p then return nil end
+          local mate = mod.exports.takeFlockmate(p.cellX, p.cellY, 8)
+          if not mate then return nil end
+          skyPartner[battle] = { species = mate.species }
+          return mate.species, mate.level
+        end,
+      })
+    end
+  end)
+
+  -- a summoned bird that became the second foe is sky property too
+  mod.events:on("mod.double_battles.double_started", function(ev)
+    local b = ev and ev.battle
+    if b and ev.recruited and b.enemy2 and b.enemy2.mon then
+      skyPartner[b] = { species = b.enemy2.mon.species }
+    end
+  end)
+
+  -- a fight that ended without deciding the sky bird (the player ran,
+  -- or caught the other one) puts the survivor back in the air
+  mod.events:on("battle.ended", function(ev)
+    local b = ev and ev.battle
+    local rec = b and skyPartner[b]
+    if not rec then return end
+    skyPartner[b] = nil
+    if ev.result ~= "run" and ev.result ~= "caught" then return end
+    -- a caught battle keeps the caught mon healthy in the lead slot,
+    -- so only the second slot can be the fleeing survivor there
+    local pool = ev.result == "caught" and { b.enemy2 }
+      or { b.enemy, b.enemy2 }
+    for _, battler in ipairs(pool) do
+      if battler and battler.mon and battler.mon.hp > 0
+         and battler.mon.species == rec.species then
+        pcall(mod.exports.spawnFlyer, battler.mon.species,
+              battler.mon.level)
+        return
+      end
     end
   end)
 end

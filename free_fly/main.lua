@@ -1287,6 +1287,10 @@ return function(mod)
                 require("src.core.Sound").playCry(Game.data, hit.species)
               end)
               mod.log:info("intercepted %s!", tostring(hit.species))
+              -- the flock partner source keys off this record: the
+              -- battle about to start may recruit a second bird
+              state.lastIntercept = { species = hit.species,
+                                      at = love.timer.getTime() }
               local db = mod.find("double_battles")
               if db and db.exports and db.exports.tagOrganic then
                 pcall(db.exports.tagOrganic)
@@ -1962,5 +1966,51 @@ return function(mod)
 
     -- a save loaded while already standing in Pallet Town gets its bird too
     spawnGift()
+  end)
+
+  -- ------- doubles integration (double_battles, when present)
+
+  mod.events:on("game.ready", function()
+    local db = mod.find("double_battles")
+    local ex = db and db.exports
+    if not ex then return end
+    -- mid-air, the mon carrying you is the one fighting beside your
+    -- lead: the ally slot prefers the mount over the bench order
+    if ex.registerAllySource then
+      ex.registerAllySource({
+        id = "free_fly_mount",
+        priority = 50,
+        provide = function(game, battle)
+          if not flying() then return nil end
+          return state.mountMon
+        end,
+      })
+    end
+    -- an intercepted bird defends with its flockmate: the second foe
+    -- of an aerial battle comes from the surrounding sky
+    if ex.registerPartnerSource then
+      ex.registerPartnerSource({
+        id = "free_fly_flock",
+        priority = 40,
+        provide = function(game, battle)
+          local it = state.lastIntercept
+          if not it then return nil end
+          if love.timer.getTime() - it.at > 10 then return nil end
+          local e = battle and battle.enemy
+          if not (e and e.mon and e.mon.species == it.species) then
+            return nil
+          end
+          local skies = mod.find("wild_skies")
+          local flock = skies and skies.exports
+            and skies.exports.takeFlockmate
+          if not flock then return nil end
+          local p = game.overworld and game.overworld.player
+          if not p then return nil end
+          local ok, mate = pcall(flock, p.cellX, p.cellY, 8)
+          if not (ok and mate) then return nil end
+          return mate.species, mate.level
+        end,
+      })
+    end
   end)
 end

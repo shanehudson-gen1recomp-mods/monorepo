@@ -4,9 +4,10 @@ Wild and trainer battles against two Pokémon at once: 1v2, full 2v2,
 trainer doubles and two-trainer pairs, in the classic layout, the wide
 layout and Dramatic Shape's 3D battle modes.
 
-> **3D battles:** with Dramatic Shape installed, both Pokémon on each
-> side stand together on the arena, the aim frame blinks on the mon
-> you're targeting, and the HUD follows whoever is acting. On the
+> **3D battles:** with Dramatic Shape or the Battle Art voxel fork
+> installed, both Pokémon on each side stand together on the arena,
+> the aim frame blinks on the mon you're targeting, and the HUD
+> follows whoever is acting. On the
 > STADIUM rungs a side showing two Pokémon rides the flat battle cards
 > (the 3D models pose one mon a side); the models return the moment
 > that side is back down to one. Camera mods that ride Dramatic
@@ -72,7 +73,11 @@ stages two trainers against your pair; nothing pairs up on its own.
 `exports.startWildDouble(speciesA, levelA, speciesB, levelB)` starts a
 1v2 on demand, and the script command `double_battles:start` does the
 same from map scripts. `exports.isDoubleBattle(battle)` tells you
-whether a battle object is one of ours.
+whether a battle object is one of ours. `registerPartnerSource`
+supplies the second foe, `registerAllySource` picks which of the
+player's mons fights beside their lead, and `registerDoubleVeto`
+keeps chosen encounters strictly 1v1; see INTEGRATION.md in the
+monorepo for the full contract.
 
 ## Install
 

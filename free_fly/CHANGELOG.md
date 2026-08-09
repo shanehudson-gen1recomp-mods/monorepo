@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.0
+
+- Aerial doubles: intercepting a bird mid-flight can now bring its
+  flockmate as a second foe, through wild_skies' new `takeFlockmate`
+  seam. Same doubles odds and options as any wild encounter.
+- The mount fights beside you: in a battle that doubles while you fly,
+  the mon carrying you takes the partner slot instead of whoever sits
+  next in the party, through double_battles' new ally-source API.
+  On the ground nothing changes.
+
 ## 1.4.4
 
 - With double_battles installed, an aerial interception's battle is
