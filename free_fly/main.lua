@@ -29,6 +29,9 @@ return function(mod)
       choices = { { "LOW", "low" }, { "MED", "med" }, { "HIGH", "high" } } },
     { key = "speed", label = "FLY SPEED", type = "choice", default = "normal",
       choices = { { "NORMAL", "normal" }, { "FAST", "fast" }, { "TURBO", "turbo" } } },
+    { key = "size", label = "SIZE", type = "choice", default = "normal",
+      choices = { { "SMALL", "small" }, { "NORMAL", "normal" },
+                  { "LARGE", "large" }, { "HUGE", "huge" } } },
     { key = "encounters", label = "AIR ENCOUNTERS", type = "toggle", default = true },
     { key = "spotted", label = "TRAINERS SPOT YOU", type = "toggle", default = false },
     { key = "gates", label = "STORY GATES", type = "toggle", default = true },
@@ -60,6 +63,17 @@ return function(mod)
   local SPEEDS = { normal = 8, fast = 6, turbo = 4 }   -- frames per step; bike is 8
   local function cruiseAlt() return ALTS[mod.options:get("altitude")] or 56 end
   local function flyFrames() return SPEEDS[mod.options:get("speed")] or 8 end
+
+  -- draw-time multiplier on the dex-height scale of the mon carrying
+  -- the player.  Its ladder is tuned against the 16px rider figure, not
+  -- wild_skies' bird sizes: the whole ladder sits above the old 1.0
+  -- (SMALL is the pre-option look), and the steps stay tight enough
+  -- that the rider still reads as seated.  Applied at draw so an
+  -- option change re-sizes mid-flight.
+  local SIZE_MULT = { small = 1, normal = 1.15, large = 1.35, huge = 1.55 }
+  local function sizeMult()
+    return SIZE_MULT[mod.options:get("size")] or 1.15
+  end
 
   local GIFT_SPECIES = "PIDGEOT"
   local GIFT_LEVEL = 10
@@ -525,6 +539,7 @@ return function(mod)
         hudQuads[key] = love.graphics.newQuad(0, frame * 16, 16, 16, iw, ih)
       end
       local s = (vp.scale or 4) * 2.2 * (Player.__freeFlyMountScale or 1)
+                * sizeMult()
       local x = vp.gameX + vp.gameWidth / 2 - 8 * s
       local y = vp.gameY + vp.gameHeight - 10 * s + math.sin(t * 3) * 3
       love.graphics.setColor(1, 1, 1, 1)
@@ -1123,13 +1138,101 @@ return function(mod)
       return waterKey and pathTo(waterKey) or nil
     end
 
+    -- wilds of kanto walks party mons behind the player through its own
+    -- update wrap, so the PF gate never sees those followers.  Its
+    -- per-mon "stay" flag is a data seam every one of its follower
+    -- shapes honours (trailer packs and the stock single follower
+    -- alike): while airborne, ground-bound mons and the mount itself
+    -- stay put.  Only mons this mod flagged are released on landing, so
+    -- a player's own STAY choices survive the flight.
+    -- a follower mod that declares exports.freeFlyAware = true handles
+    -- flight itself (watching the mod.free_fly.takeoff and landed
+    -- events, or the isFlying/altitude exports); every follower hand
+    -- of ours stays off while any such mod is loaded
+    local function followerModAware()
+      local declared = Game.mods and Game.mods.exports
+      if not declared then return false end
+      for _, ex in pairs(declared) do
+        if type(ex) == "table" and ex.freeFlyAware == true then
+          return true
+        end
+      end
+      return false
+    end
+
+    -- while the trail flies, the foreign engine's ground rules would
+    -- still pin it: fences, ledges and water reject its step goals, so
+    -- an airborne trailer snags on scenery.  Its pathing has a single
+    -- cell gate; wrap it once (installed lazily, gated on flight, never
+    -- removed, per our own INTEGRATION.md rules) so a mon trailer may
+    -- take any in-bounds cell while airborne.  The trainer trailer is
+    -- a person and keeps walking by the ground rules.
+    local function wildsEngine()
+      local wilds = mod.find("overworld_wild_spawns")
+      local follower = wilds and wilds.exports and wilds.exports.follower
+      return follower and follower.control or nil
+    end
+    local function openWildsSkyLanes()
+      local engine = wildsEngine()
+      if not engine or engine.__freeFlySkyLanes
+         or type(engine.isFollowerCellAllowed) ~= "function" then
+        return
+      end
+      engine.__freeFlySkyLanes = true
+      local origAllowed = engine.isFollowerCellAllowed
+      engine.isFollowerCellAllowed = function(self, game, ow, entity, x, y, context)
+        if flying() and ow and ow.map and ow.map:inBounds(x, y) then
+          local role = (context and context.role)
+            or (entity and entity.pokepcTrailerKind == "trainer"
+                and "trainer_trailer")
+          if role ~= "trainer_trailer" then return true end
+        end
+        return origAllowed(self, game, ow, entity, x, y, context)
+      end
+    end
+
+    local wildsGrounded = {}
+    local trailersFlown = false
+    local function syncWildsFollowers(airborne)
+      local party = Game.save and Game.save.party or {}
+      if airborne then
+        for _, mon in ipairs(party) do
+          if not mon.stopFollowing
+             and (mon == state.mountMon
+                  or not Sky.hasType(Game.data, mon.species, "FLYING")) then
+            mon.stopFollowing = true
+            wildsGrounded[mon] = true
+          end
+        end
+        return
+      end
+      for mon in pairs(wildsGrounded) do
+        mon.stopFollowing = nil
+        wildsGrounded[mon] = nil
+      end
+    end
+
     OC.__freeFlyTick = function(ow, dt)
+      -- the shared wrap is mid-frame through an older leftover wrap:
+      -- the outermost runs this tick once when the frame unwinds
+      if OC.__skyTicking then return end
+      -- the follower gate on PF.update gets clobbered by the same
+      -- foreign restores as OC.update; re-arm it from here, since this
+      -- tick itself rides the healed wrap
+      local PFmod = package.loaded["src.world.PikachuFollower"]
+      local ensurePF = PFmod and PFmod.__freeFlyEnsureWrap
+      if ensurePF then ensurePF() end
       local p = ow.player
       if not p then return end
       if ow.map and (not state.landmark
-                     or state.landmark.mapId ~= ow.map.id) then
+                     or state.landmark.mapId ~= ow.map.id
+                     or state.landmark.retry) then
         local ok, lm = pcall(landmarkCellsFor, ow)
-        state.landmark = ok and lm or { mapId = ow.map.id, w = 1, cells = {} }
+        -- never cache a failed scan for the whole visit: a landmark
+        -- computed on a bad frame (mid-transition) would silently strip
+        -- the tower facades and let landings drop through roofs
+        state.landmark = ok and lm
+          or { mapId = ow.map.id, w = 1, cells = {}, retry = true }
       end
       if not flying() then
         if p.freeFlyAlt then p.freeFlyAlt, p.freeFlying = nil, nil end
@@ -1141,9 +1244,55 @@ return function(mod)
           state.v3dRef.camera = nil
         end
         dropRider(ow)
+        syncWildsFollowers(false)
+        local ground = PFmod and PFmod.__freeFlyGround
+        if ground and type(ow.pokepcTrailers) == "table" then
+          for _, npc in ipairs(ow.pokepcTrailers) do
+            if npc then ground(npc) end
+          end
+        end
+        -- a trailer that landed mid-fence (its sky lane closed under
+        -- it) is stranded by ground rules; let the engine notice and
+        -- reseed the trail behind the player
+        if trailersFlown then
+          trailersFlown = false
+          local engine = wildsEngine()
+          if engine and type(ow.pokepcTrailers) == "table" then
+            for _, npc in ipairs(ow.pokepcTrailers) do
+              local okCell = true
+              pcall(function()
+                okCell = engine:isFollowerCellAllowed(Game, ow, npc,
+                  npc.cellX, npc.cellY, {}) ~= false
+              end)
+              if not okCell then
+                pcall(function() engine:removeTrailers(ow) end)
+                break
+              end
+            end
+          end
+        end
         return
       end
       p.freeFlying = true
+      if not followerModAware() then
+        syncWildsFollowers(true)
+        -- the FLYING-type trailers still walking below get the same air
+        -- dress as the engine follower, at the player's own altitude.
+        -- This runs after the foreign engine's frame (this tick is the
+        -- outermost layer), so its land and swim sprite swaps lose to
+        -- the flying sheet every frame, sea included.
+        openWildsSkyLanes()
+        local dress = PFmod and PFmod.__freeFlyDress
+        if dress and type(ow.pokepcTrailers) == "table" then
+          for _, npc in ipairs(ow.pokepcTrailers) do
+            local species = npc and npc.pokepcMon and npc.pokepcMon.species
+            if species then
+              dress(npc, Game, species, state.alt)
+              trailersFlown = true
+            end
+          end
+        end
+      end
       -- the mount IS the player's sheet while airborne, so every renderer
       -- (voxel first/third person frame remaps included) shows it; the
       -- walking sheet is stashed for the rider overlay and the landing
@@ -1448,17 +1597,13 @@ return function(mod)
       end
     end
 
+    -- the shared self-healing wrap: survives wilds of kanto's follower
+    -- engine restoring OC.update from a pre-wrap snapshot, and shares
+    -- one tag with wild_skies so the two watchdogs never fight
+    Sky.ensureUpdateWrap(OC, "__freeFlyTick")
+
     if not OC.__freeFlyWrapped then
       OC.__freeFlyWrapped = true
-
-      local origUpdate = OC.update
-      OC.update = function(self, dt)
-        origUpdate(self, dt)
-        if OC.__freeFlyTick then
-          local ok, err = pcall(OC.__freeFlyTick, self, dt)
-          if not ok then print("[free_fly] tick failed: " .. tostring(err)) end
-        end
-      end
 
       -- doors and edge warps must not swallow a bird passing over them
       local origTakeWarp = OC.takeWarp
@@ -1684,7 +1829,7 @@ return function(mod)
       else
         love.graphics.setColor(0, 0, 0, 0.35)
       end
-      local s = Player.__freeFlyMountScale or 1
+      local s = (Player.__freeFlyMountScale or 1) * sizeMult()
       local r = math.max(3, 7 - lift / 16) * s
       love.graphics.ellipse("fill", self.px + 8 - camX, self.py + 13 - camY,
                             r, r * 0.4)
@@ -1788,10 +1933,16 @@ return function(mod)
         npc.__freeFlyAirSpecies = species
         npc.__freeFlyAirSprite =
           (Sky.mountSprite(game.data, species, "free_fly_follower"))
-        npc.__freeFlyAirScale = Sky.dexScale(game.data, species)
       end
+      npc.__freeFlyAirScale = Sky.dexScale(game.data, species) * sizeMult()
       if npc.__freeFlyAirSprite then
-        npc.__freeFlyGroundSprite = npc.sprite
+        -- stash only a sprite that isn't ours: a foreign engine may
+        -- re-dress the follower mid-air (land/swim sheets) every few
+        -- frames, and stashing our own air sheet would lose the ground
+        -- one for the landing
+        if npc.sprite ~= npc.__freeFlyAirSprite then
+          npc.__freeFlyGroundSprite = npc.sprite
+        end
         npc.sprite = npc.__freeFlyAirSprite
       end
       if npc.__freeFlyDressed then return end
@@ -1841,15 +1992,34 @@ return function(mod)
       end
     end
 
-    if not PF.__freeFlyWrapped then
-      PF.__freeFlyWrapped = true
-      PF.__freeFlyOrigUpdate = PF.update
-      PF.update = function(game, ow, ...)
+    -- the overworld tick dresses foreign follower trailers with these
+    -- (they live on PF because it is required in both scopes)
+    PF.__freeFlyDress, PF.__freeFlyGround = dressFollower, groundFollower
+
+    -- wilds of kanto's follower engine wraps and restores PF.update the
+    -- same way it does OC.update: a restore from a snapshot taken before
+    -- this dispatcher existed silently drops the flight gate, and a
+    -- grounded-only follower trails the player into the sky.  Tagged and
+    -- re-armed from the flight tick, which itself rides the healed
+    -- OC.update wrap.
+    PF.__freeFlyEnsureWrap = function()
+      if PF.update == PF.__freeFlyDispatch then return end
+      local orig = PF.update
+      PF.__freeFlyDispatch = function(game, ow, ...)
+        -- an outer copy of this dispatcher is mid-gate: stay vanilla
+        if PF.__freeFlyInGate then return orig(game, ow, ...) end
         local tick = PF.__freeFlyTick
-        if tick then return tick(game, ow, ...) end
-        return PF.__freeFlyOrigUpdate(game, ow, ...)
+        if not tick then return orig(game, ow, ...) end
+        PF.__freeFlyOrigUpdate = orig
+        PF.__freeFlyInGate = true
+        local ok, r = pcall(tick, game, ow, ...)
+        PF.__freeFlyInGate = nil
+        if not ok then error(r, 0) end
+        return r
       end
+      PF.update = PF.__freeFlyDispatch
     end
+    PF.__freeFlyEnsureWrap()
     PF.__freeFlyTick = function(game, ow, ...)
       local orig = PF.__freeFlyOrigUpdate
       local npc = ow and PF.current(ow)
@@ -1857,14 +2027,7 @@ return function(mod)
         if npc then groundFollower(npc) end
         return orig(game, ow, ...)
       end
-      -- a follower mod that declares freeFlyAware handles flight itself
-      -- (it can watch the mod.free_fly.takeoff/landed events and the
-      -- isFlying/altitude exports); we keep our hands off its follower
-      local pokepc = mod.find("PokePCFollowers_VoxelMerge")
-      if pokepc and pokepc.exports
-         and pokepc.exports.freeFlyAware == true then
-        return orig(game, ow, ...)
-      end
+      if followerModAware() then return orig(game, ow, ...) end
       local mon = followerMon(game)
       -- the mon carrying you cannot also trail you
       if not mon or mon == state.mountMon
@@ -1880,7 +2043,7 @@ return function(mod)
       local r = orig(game, ow, ...)
       npc = PF.current(ow)
       if npc then
-        dressFollower(npc, game, mon.species, math.max(0, state.alt - 8))
+        dressFollower(npc, game, mon.species, state.alt)
       end
       return r
     end

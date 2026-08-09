@@ -1,6 +1,52 @@
 # Changelog
 
-## 1.5.0
+## 1.5.1
+
+- New SIZE option (SMALL / NORMAL / LARGE / HUGE) for the mon carrying
+  you. The ladder is tuned against the rider figure rather than
+  wild_skies' bird sizes, and sits a step above the old look: SMALL is
+  the size flight always had, NORMAL draws about 15% bigger, and the
+  steps stay tight enough that you still read as seated. The
+  flight-gated follower in the air scales along with it, and changes
+  apply mid-flight.
+
+- Survive foreign update-hook restores: wilds of kanto 1.12.x's
+  follower engine resets the overworld update function from a snapshot
+  taken before this mod hooked it, which silently stopped the flight
+  tick. The hook is now re-armed from the draw pass whenever a foreign
+  restore drops it.
+- The follower flight gate heals the same way: the engine also wraps
+  and restores PikachuFollower.update, which stripped the gate and let
+  a grounded-only follower (a Bulbasaur without FLY) trail the player
+  into the sky. The gate dispatcher is tagged and re-armed every frame
+  from the flight tick.
+- Wilds of kanto's own followers respect flight now too: its engine
+  walks party mons through its own update wrap, past the PF gate, so
+  free_fly speaks its language instead. While airborne, ground-bound
+  mons and the mount itself are marked with the engine's per-mon stay
+  flag (honoured by its trailer packs and stock follower alike) and
+  released on landing. Only mons free_fly marked are released, so STAY
+  choices a player made themselves survive the flight. FLYING-types
+  keep trailing, and now properly: they fly at exactly the player's
+  altitude in their flying sheet wherever the trail goes, land or sea.
+  free_fly's dress runs after the foreign engine's frame, so its land
+  and swim sprite swaps can never show through mid-flight. Airborne
+  trailers also stop snagging on scenery: the engine's cell gate opens
+  to any in-bounds cell for a flying mon trailer (the trainer trailer
+  keeps ground rules), and one that lands mid-fence gets reseeded
+  behind the player by the engine itself. Declaring
+  `freeFlyAware = true` still turns all of this off.
+- Assisted landings no longer trust a facade scan from a bad frame: a
+  tower-footprint scan that failed (mid-transition) was cached for the
+  whole map visit with no facades in it, so a landing could set down
+  through a roof. A failed scan now retries next frame instead.
+- Cross-mod compatibility: the hook rides skylib's new shared wrap
+  alongside wild_skies 1.6.1. One tag for the whole family means the
+  mods recognise each other's hook instead of treating a sibling as a
+  foreign mod, and any one of them healing the wrap brings every
+  registered tick back. Mixed versions are fine: pair this with an
+  older wild_skies and both still work, the older one just lacks the
+  self-healing until it updates.
 
 - Aerial doubles: intercepting a bird mid-flight can now bring its
   flockmate as a second foe, through wild_skies' new `takeFlockmate`
