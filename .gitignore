@@ -2,3 +2,5 @@ dist/
 .DS_Store
 # synced from shared/ by scripts; never edited in place
 */lib/shared/
+# local dev scratchpad, not published
+docs/
