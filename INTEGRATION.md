@@ -66,9 +66,38 @@ follower gets lifted into the air and trails the player, anything else
 is despawned until landing, and the mon currently being ridden is never
 also shown trailing.
 
-If your mod wants to own that behaviour instead, export
-`freeFlyAware = true`. free_fly then leaves your follower completely
-alone, and you react to the takeoff and landed events yourself.
+That default only reaches followers driven through the engine's
+`PikachuFollower`. If your mod moves followers from its own update
+loop, free_fly cannot see them, and the usual player report is a
+ground-bound follower walking under an airborne player, through water
+and all.
+
+So if you run your own follower system, export `freeFlyAware = true`.
+free_fly then leaves followers completely alone, engine ones included,
+and trusts you to react: listen for the takeoff and landed events, or
+poll `isFlying()` / `altitude()` from your tick, and hide, ground or
+lift your followers as fits your mod. Only declare the flag if you
+actually manage followers; it switches off free_fly's own handling.
+
+## Wrapping engine functions
+
+Not an API of ours, but the interop rule that keeps all of the above
+working. If your mod wraps an engine function (`OverworldState.update`
+is the popular one), the slot you wrapped is a shared chain: other
+mods wrap on top of you, and you never know who.
+
+Two rules follow. Install your wrap once and keep it installed,
+gating its body on an "active" flag when your feature toggles. And
+never restore the function from a snapshot you captured earlier:
+another mod's wrap may sit above yours by then, and writing your
+snapshot back silently amputates everything wrapped after you. The
+victim's feature just stops, with no error anywhere, and the player's
+bug report lands on them, not you.
+
+Our mods re-arm their own hooks when this happens (you'll see a
+`[sky]` re-arming line in the log), but that heals us, not the chain.
+If a hook of yours ever "stops working when both mods are installed",
+look for an unconditional restore first.
 
 ## wild_skies
 
