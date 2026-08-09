@@ -79,9 +79,12 @@ trainers don't spot you (unless you opt in), step events (locked doors,
 gate guards, spinners, poison) wait for you to land, the Cycling Road
 doesn't demand a bicycle until you land on it, saving is blocked (so a
 save can never strand you mid-air), and ground battles can't reach you.
-Crossing a seam whose landing is open water asks "That looks dangerous!"
-once per map. Landing on water with a SURF knower in the party puts you
-straight into surfing; taking off from a surf works too.
+Flying south from Pallet Town onto the sea of Route 21 (at any point
+along the seam) asks once whether you really mean the crossing (your
+mount is feeling brave); a party that could already SURF is never
+asked, and a CROSS answer is remembered for the save.
+Landing on water with a SURF knower in the party puts you straight
+into surfing; taking off from a surf works too.
 
 You still cannot fly indoors or in caves (entering one ends the flight),
 into badge-gated areas you haven't earned, or away from a battle.

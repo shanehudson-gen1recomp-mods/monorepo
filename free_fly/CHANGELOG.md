@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.3
+
+- The sea-crossing confirm is now Pallet Town's send-off. Flying south
+  onto Route 21 asks at any point along the seam (the old check keyed
+  on the landing cell, so crossing above the fence-line slipped past
+  it), the message calls your mount by name ("You usually need the
+  SOULBADGE to cross here... But PIDGEOT is feeling brave!"), and a
+  party that could already SURF that stretch is never asked. Other
+  seams no longer prompt at all; CROSS is still remembered per save.
+
 ## 1.5.2
 
 - Gen1 Modern UI works again alongside this mod. That mod checks that

@@ -36,7 +36,7 @@ fought and caught.
 |---|---|---|
 | SKY DENSITY | MED | LOW / MED / HIGH flyer caps and spawn cooldowns |
 | BIRD SIZE | NORMAL | SMALL / NORMAL / LARGE / HUGE draw scale on top of dex height |
-| GROUND BUMPS | ON | low birds (perched, landing, flushed) can battle a walking player |
+| GROUND BATTLES | ON | low birds (perched, landing, flushed) can battle a walking player |
 
 ## Works well with
 

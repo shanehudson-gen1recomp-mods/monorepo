@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.3
+
+- The GROUND BUMPS option is now called GROUND BATTLES. Same toggle,
+  same default, same saved setting; only the label changed.
+
 ## 1.6.2
 
 - Gen1 Modern UI works again alongside this mod. That mod checks that

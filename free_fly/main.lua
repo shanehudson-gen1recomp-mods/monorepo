@@ -1633,12 +1633,23 @@ return function(mod)
       return type(ok) == "table" and ok[mapId] == true
     end
 
-    -- crossing where only SURF could take a walker: confirm once per map
+    -- the seams that count as setting out to sea, listed explicitly
+    -- ("from>to").  Just the classic departure for now; Cinnabar's and
+    -- Fuchsia's coasts are candidates once this one feels right.
+    local SEA_SEAMS = {
+      ["PALLET_TOWN>ROUTE_21"] = true,
+    }
+
+    -- leaving the coast for open sea: confirm once per map, per save.
+    -- \v scrolls the third line in, \f page-breaks before the mount's
+    -- moment; names stay inside the 18-column box (10-char cap + 7)
     local function dangerAsk(destMapId)
       if (state.askCooldown or 0) > 0 then return end
       state.askCooldown = 2
+      local name = Sky.monName(Game.data, state.mountMon)
       mod.world:queueScript({
-        { "show_text", "That looks\ndangerous!" },
+        { "show_text", "You usually need\nthe SOULBADGE to\vcross here...\fBut "
+            .. name .. " is\nfeeling brave!" },
         { "choice", { "CROSS", "TURN BACK" } },
         { "jump_if_false", "no" },
         { "free_fly:allow_crossing", destMapId },
@@ -1763,12 +1774,16 @@ return function(mod)
         windBack()
         return true
       end
-      if not dangerAllowed(destMapId) then
-        local dest, ts, x, y = ow:connectionLanding(dir)
-        if dest and MapDef.defIsWaterCell(dest, ts, x, y) then
-          dangerAsk(destMapId)
-          return true
-        end
+      -- the confirm belongs to the listed sea seams only, judged by the
+      -- seam itself rather than any cell: Pallet's fence-line lands on
+      -- Route 21's dry rim and Pallet's own inlet puts water under the
+      -- flyer, so cell-local tests let one path or the other slip
+      -- through.  The per-map memory keeps a repeat from re-asking, and
+      -- a party that could already SURF this stretch is never asked.
+      if SEA_SEAMS[(ow.map and ow.map.id or "") .. ">" .. tostring(destMapId)]
+         and not dangerAllowed(destMapId) and not surfAllowed(ow) then
+        dangerAsk(destMapId)
+        return true
       end
       return false
     end

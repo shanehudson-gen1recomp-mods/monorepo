@@ -30,7 +30,7 @@ return function(mod)
     { key = "size", label = "BIRD SIZE", type = "choice", default = "normal",
       choices = { { "SMALL", "small" }, { "NORMAL", "normal" },
                   { "LARGE", "large" }, { "HUGE", "huge" } } },
-    { key = "bumps", label = "GROUND BUMPS", type = "toggle", default = true },
+    { key = "bumps", label = "GROUND BATTLES", type = "toggle", default = true },
   })
 
   -- a bird at or below this height can collide with a walking player;
