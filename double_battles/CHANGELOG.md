@@ -17,6 +17,12 @@
   models. Fixed alongside: on the card tier the lead's model now
   stands down for the frame (previously the model and the composed
   cards could draw on the same cell).
+- Robust to wiring order: the mode's begin runs while the battle is
+  staged, which can be before the adapter installs (it hooks in off
+  the battle-started event). Pair state is keyed on the battle itself
+  and the arena is fetched live off `OverworldBattle.arena()`, so the
+  models cover from the first battle on instead of the composed cards
+  sitting in front of them.
 
 ## 0.6.0
 

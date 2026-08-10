@@ -472,6 +472,7 @@ return function(env)
       s.warned = false
       s.arena = ok and arena or nil
       s.groundY = 0
+      s.forBattle = nil
       return ok
     end
   end
@@ -482,19 +483,34 @@ return function(env)
       if s then
         for _, mon in pairs(s.mons) do pcall(mon.release, mon) end
         s.mons, s.covering, s.coversLead, s.arena = {}, {}, {}, nil
+        s.forBattle = nil
       end
       return St.__doubleBattlesOrigFinish(...)
     end
   end
 
-  local function makeStadiumUpdateHook(St, Mon, Pack)
+  local function makeStadiumUpdateHook(St, Mon, Pack, Ov)
     return function(dt, battle, groundY)
       local orig = St.__doubleBattlesOrigUpdate
       local s = St.__doubleBattlesPairState
-      if not (s and s.arena and battle and battle.__double
-              and St.active()) then
+      if not (s and battle and battle.__double and St.active()) then
         if s then s.covering = {} end
         return orig(dt, battle, groundY)
+      end
+      -- the mode's begin can run before this adapter is wired (it is
+      -- installed off the battle-started event, the stage is picked at
+      -- the push), so the pair state is keyed on the battle itself and
+      -- the arena is fetched live off the mode's own public getter
+      if s.forBattle ~= battle then
+        for _, mon in pairs(s.mons) do pcall(mon.release, mon) end
+        s.mons, s.covering, s.coversLead = {}, {}, {}
+        s.spacing, s.broken, s.at = {}, {}, {}
+        s.warned = false
+        s.forBattle = battle
+      end
+      if not s.arena and type(Ov.arena) == "function" then
+        local okA, arena = pcall(Ov.arena)
+        if okA and type(arena) == "table" then s.arena = arena end
       end
       s.groundY = groundY or s.groundY or 0
 
@@ -540,7 +556,10 @@ return function(env)
         local lead = side == "enemy" and battle.enemy or battle.player
         local subbed = (b and b.substituteHP)
           or (lead and lead.substituteHP)
-        s.covering[side] = (live and ready and not morph and not subbed
+        -- no arena means nowhere to stand a partner model, so the side
+        -- rides the cards (and the borrow below hides the lead's model)
+        s.covering[side] = (live and ready and s.arena ~= nil
+                            and not morph and not subbed
                             and not s.broken[side]) and true or false
         local trainerNow
         if side == "enemy" then
@@ -755,7 +774,7 @@ return function(env)
     return true
   end
 
-  local function wirePair(st, pair)
+  local function wirePair(st, pair, ov)
     installBattleTaps()
     pairState(st)
     if wrapStadiumFn(st, "begin", "Begin") then
@@ -766,7 +785,7 @@ return function(env)
     end
     if wrapStadiumFn(st, "update", "Update") then
       st.__doubleBattlesHookUpdate =
-        makeStadiumUpdateHook(st, pair.Mon, pair.Pack)
+        makeStadiumUpdateHook(st, pair.Mon, pair.Pack, ov)
     end
     if wrapStadiumFn(st, "draw", "Draw") then
       st.__doubleBattlesHookDraw = makeStadiumDrawHook(st)
@@ -808,7 +827,7 @@ return function(env)
         end
       end
       st.__doubleBattlesCoversHook = makeCoversHook(st)
-      if pair then pcall(wirePair, st, pair) end
+      if pair then pcall(wirePair, st, pair, ov) end
     end
     wired[ov] = true
   end

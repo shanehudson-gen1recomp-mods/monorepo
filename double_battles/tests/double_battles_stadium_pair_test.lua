@@ -256,5 +256,31 @@ fakeSt.finish()
 T.eq(s.arena, nil, "arena dropped at finish")
 T.eq(next(s.mons), nil, "partner mons released")
 
+-- ------- begin missed: wired mid-battle, the pair still recovers
+--
+-- The mode's begin runs while the battle is staged, which can be
+-- before this adapter is wired (installed off the battle-started
+-- event).  The update hook must key its state on the battle itself
+-- and fetch the arena live, or the side rides the cards forever with
+-- the lead's model drawn behind them.
+
+fakeOv.arena = function() return { player = { 0, 0 }, enemy = { 0, 100 } } end
+stActive = true          -- the mode is live; our begin wrap never saw it
+b.enemy2.mon.hp = 10
+fakeSt.update(0.016, b, 0)
+T.check(s.arena ~= nil, "arena fetched live off the public getter")
+T.eq(s.covering.enemy, true, "pair covers without a seen begin")
+T.check(s.mons.enemy and s.mons.enemy.rig, "partner mon rebuilt")
+
+-- and with no arena reachable at all, the side rides the cards with
+-- the lead's model stood down rather than doubling the draw
+fakeOv.arena = nil
+fakeSt.begin({ player = { 0, 0 }, enemy = { 0, 100 }, map = {} })
+s.arena = nil            -- as if the stage had never been picked up
+fakeSt.update(0.016, b, 0)
+T.eq(s.covering.enemy, false, "no arena: pair not ready")
+T.eq(updSeen.trainer, true, "lead model stood down on the card tier")
+T.eq(fakeSt.covers(b, "enemy"), false, "side rides the cards")
+
 run.release()
 T.finish("double_battles_stadium_pair")
