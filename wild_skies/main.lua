@@ -1391,6 +1391,26 @@ return function(mod)
            self.facing, trainerFlap(self), false, false
   end
 
+  -- the rosterless rider's Pidgeot fights too: appended to the enemy
+  -- party through the engine's own hook, and ONLY when the pending
+  -- battle is the one this mod queued for exactly that donor, so a
+  -- vanilla encounter with the same class never grows a bench
+  mod.hooks:wrap("trainer.party", function(nextFn, oppClass, partyIndex,
+                                           party)
+    party = nextFn(oppClass, partyIndex, party)
+    local rec = expectingSkyBattle
+    if rec and rec.mount and rec.mount.fallback
+       and rec.donor.class == oppClass
+       and rec.donor.party == partyIndex then
+      local grown = {}
+      for i, slot in ipairs(party or {}) do grown[i] = slot end
+      grown[#grown + 1] = { species = rec.mount.species,
+                            level = rec.mount.level }
+      return grown
+    end
+    return party
+  end)
+
   -- the queued battle took the stack: hand over cleanly and wait it
   -- out on the spot (battle.ended decides what happens after)
   mod.events:on("battle.started", function()
