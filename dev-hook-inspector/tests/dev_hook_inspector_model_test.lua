@@ -56,6 +56,25 @@ T.eq(hooks["mod.hook_fixture.pong"], nil,
 T.eq(fx.hooks[1].name, "announce", "exports lead the list")
 T.eq(fx.hooks[#fx.hooks].name, "mod.hook_fixture.ping", "events close it")
 
+-- engine-hook wraps surface straight off the live chains, with the
+-- priority and chain position no metadata had to declare
+local wrap = hooks["fixture.chain"]
+T.check(wrap ~= nil, "the fixture's wrap is listed")
+T.eq(wrap.kind, "wrap", "kind wrap")
+T.eq(wrap.priority, 25, "at its registered priority")
+T.eq(wrap.of, 1, "alone in its chain")
+T.check(wrap.doc and wrap.doc:find("priority 25", 1, true) ~= nil,
+  "the detail line spells the chain facts out")
+
+-- the inspector's own START menu wrap shows up on itself the same way
+local selfWraps = hooksOf(find("dev-hook-inspector"))
+T.check(selfWraps["ui.start_menu.items"] ~= nil,
+  "the inspector reports its own menu wrap")
+
+-- the model carries the manifest facts a dev triages load order by
+T.eq(fx.priority, 500, "priority from the manifest")
+T.eq(fx.skippedFiles, 0, "small mods scan whole")
+
 -- the bus watcher picks up an event whose name never appears whole in
 -- the source, once it fires
 run.loader.exports.hook_fixture.whisper()

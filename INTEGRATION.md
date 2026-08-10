@@ -342,6 +342,21 @@ For symmetry, the other side of the fence:
   `freeFlyAware` as above to opt out.
 - Quick Select (`jj_quick_select`): free_fly registers a FLY WHISTLE
   item through its exports when it's installed.
+- Crystal 251 (`CRYSTAL_251`): mostly we consume nothing directly,
+  and that's the design. Its species land in the engine's merged data
+  (`data.pokemon` with types and tmhm, `data.encounters`, icons), the
+  same tables we already read, so Johto flyers and mounts work with
+  no id-keyed code. Two deliberate seams on
+  top: wild_skies probes any mod exporting a period-aware `ecology`
+  (a table with `list()` returning rows of `{ mapId, terrain, period,
+  group }`) to learn which species fly only at night, and
+  double_battles announces every partner battler over the engine's
+  `battle.battler_switched` event so Crystal's per-battler stat
+  attach follows the whole double. wild_skies also declares
+  `CRYSTAL_251` as an optional dependency purely for load order (both
+  sit at priority 110). Solitary legends (the roamers and sanctuary
+  encounters) are kept 1v1 by a species-keyed veto in double_battles;
+  Lugia and Ho-Oh never roll in wild_skies' legendary sky slot.
 
 If you maintain one of these and change a surface we use, open an issue
 on this repo and we'll follow.

@@ -78,8 +78,12 @@ return function(mod)
   local WANDER = math.rad(150)   -- heading jitter scale
   local FLUSH_CELLS = 2       -- a grounded bird flushes at this distance
 
-  -- crepuscular species only fly the night sky
-  local NIGHT_ONLY = { ZUBAT = true, GOLBAT = true }
+  -- crepuscular species only fly the night sky.  This hand list is a
+  -- fallback: a dataset overhaul that exports a period-aware ecology
+  -- (Crystal 251) teaches us its own night species automatically, and
+  -- the Gen 2 ids here are inert until such a dataset registers them
+  local NIGHT_ONLY = { ZUBAT = true, GOLBAT = true, CROBAT = true,
+                       HOOTHOOT = true, NOCTOWL = true, MURKROW = true }
 
   -- the sparse pools for outdoor maps whose slots offer no flyers;
   -- repeats weight the roll.  Open water gets its own pool: Pidgeot
@@ -92,7 +96,9 @@ return function(mod)
   local AMBIENT_NITE = { "ZUBAT", "ZUBAT", "ZUBAT", "GOLBAT" }
   -- believable bands for evolved ambient species: the bird's level rolls
   -- off the map's own encounter slots, then these clamp it so a Pidgeot
-  -- is never a hatchling and never an outlier (levels ride into battles)
+  -- is never a hatchling and never an outlier (levels ride into battles).
+  -- Species outside this list use the band the world itself deals them
+  -- (their observed encounter-slot levels, gathered below).
   local AMBIENT_LEVELS = {
     PIDGEOTTO = { 15, 20 }, PIDGEOT = { 25, 32 },
     FEAROW = { 20, 27 }, GOLBAT = { 22, 26 },
@@ -110,6 +116,102 @@ return function(mod)
   }
   local ULTRA_SET = {}
   for _, u in ipairs(ULTRA_RARES) do ULTRA_SET[u.species] = true end
+
+  -- Derived skies: rather than hand-listing every generation's birds,
+  -- the ambient pools grow from the world's own encounter tables.  Any
+  -- FLYING species a dataset (vanilla, Crystal 251, a future overhaul)
+  -- places in a wild slot earns the ambient sky: WATER/FLYING species
+  -- patrol the sea pool, night species the night pool, the rest the
+  -- day pool.  Weight follows how widely the world hosts the species,
+  -- capped so the curated pools keep their flavor, and the observed
+  -- slot levels become the species' believable band.
+  local function derivedSky(data)
+    local recs, order = {}, {}
+    for _, enc in pairs(data.encounters or {}) do
+      for _, terrain in ipairs({ "grass", "water" }) do
+        local slots = enc[terrain] and enc[terrain].slots
+        for _, slot in ipairs(slots or {}) do
+          local s = slot.species
+          if Sky.hasType(data, s, "FLYING") and not ULTRA_SET[s] then
+            local rec = recs[s]
+            if not rec then
+              rec = { count = 0, lo = math.huge, hi = 0 }
+              recs[s] = rec
+              order[#order + 1] = s
+            end
+            rec.count = rec.count + 1
+            if slot.level then
+              rec.lo = math.min(rec.lo, slot.level)
+              rec.hi = math.max(rec.hi, slot.level)
+            end
+          end
+        end
+      end
+    end
+    table.sort(order)
+    return recs, order
+  end
+
+  -- night knowledge: a dataset that exports a period-aware ecology
+  -- (Crystal 251's `ecology.list()`) tells us which of its species fly
+  -- only after dark -- present in a night table, absent from every
+  -- morning and day one.  Probed by capability, never by mod id, so
+  -- any overhaul speaking the same shape is understood.  The hand
+  -- list keeps the Zubat line (and known Gen 2 owls) nocturnal when
+  -- no ecology is exported.
+  local function nightSet(game)
+    local night = {}
+    for s in pairs(NIGHT_ONLY) do night[s] = true end
+    local exports = game.mods and game.mods.exports or {}
+    for _, ex in pairs(exports) do
+      local eco = type(ex) == "table" and ex.ecology
+      if type(eco) == "table" and type(eco.list) == "function" then
+        local ok, rows = pcall(eco.list)
+        if ok and type(rows) == "table" then
+          local daylight = {}
+          for _, row in ipairs(rows) do
+            if row.period == "day" or row.period == "morning" then
+              for _, slot in ipairs((row.group and row.group.slots) or {}) do
+                daylight[slot.species] = true
+              end
+            end
+          end
+          for _, row in ipairs(rows) do
+            if row.period == "night" then
+              for _, slot in ipairs((row.group and row.group.slots) or {}) do
+                if not daylight[slot.species] then
+                  night[slot.species] = true
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+    return night
+  end
+
+  -- a curated base pool plus every derived species that belongs in
+  -- this air; base membership wins so the hand weighting stays intact
+  local function ambientPool(data, extKey, night, recs, order)
+    local base = extKey == "NITE" and AMBIENT_NITE
+      or extKey == "SEA" and AMBIENT_SEA or AMBIENT_DAY
+    local pool, inBase = {}, {}
+    for _, s in ipairs(base) do
+      pool[#pool + 1] = s
+      inBase[s] = true
+    end
+    for _, s in ipairs(order) do
+      if not inBase[s] then
+        local bucket = night[s] and "NITE"
+          or Sky.hasType(data, s, "WATER") and "SEA" or "DAY"
+        if bucket == extKey then
+          for _ = 1, math.min(recs[s].count, 3) do pool[#pool + 1] = s end
+        end
+      end
+    end
+    return pool
+  end
 
   local flyers = {}
   local battleRest = 0
@@ -314,12 +416,13 @@ return function(mod)
 
   -- the map's grass slots filtered to FLYING types and the time of day;
   -- night-only species own the night sky and sit out the daylight
-  local function flyingSlots(game, mapId, tod)
+  local function flyingSlots(game, mapId, tod, nocturnal)
+    nocturnal = nocturnal or NIGHT_ONLY
     local all, night = {}, {}
     for _, slot in ipairs(Sky.grassSlots(game.data, mapId)) do
       if Sky.hasType(game.data, slot.species, "FLYING") then
         local pick = { species = slot.species, level = slot.level }
-        if NIGHT_ONLY[slot.species] then
+        if nocturnal[slot.species] then
           night[#night + 1] = pick
         else
           all[#all + 1] = pick
@@ -954,12 +1057,14 @@ return function(mod)
       local effTod = outside and tod or "NITE"
       local key = ow.map.id .. "#" .. effTod
       if picksCache.key ~= key then
+        local nocturnal = nightSet(Game)
         picksCache.key = key
         picksCache.ambient = false
-        picksCache.picks = flyingSlots(Game, ow.map.id, effTod)
+        picksCache.picks = flyingSlots(Game, ow.map.id, effTod, nocturnal)
         picksCache.forest = forest or false
         picksCache.inside = not outside
         picksCache.levels = nil
+        picksCache.bands = nil
         -- towns and cities get sky-life too, but as scenery only: every
         -- bird there is shy, so nothing ever starts a battle downtown.
         -- Cinnabar is an _ISLAND and the league gate a _PLATEAU; the
@@ -981,11 +1086,19 @@ return function(mod)
           local sea = not town and encDef and encDef.water ~= nil
             and not (encDef.grass and encDef.grass.slots
                      and #encDef.grass.slots > 0)
-          local pool = tod == "NITE" and AMBIENT_NITE
-            or sea and AMBIENT_SEA or AMBIENT_DAY
+          local extKey = tod == "NITE" and "NITE" or sea and "SEA" or "DAY"
+          local recs, order = derivedSky(Game.data)
+          local pool = ambientPool(Game.data, extKey, nocturnal, recs, order)
           for _, species in ipairs(pool) do
             picksCache.picks[#picksCache.picks + 1] = { species = species }
           end
+          -- level bands the world itself taught us, for species the
+          -- hand-tuned AMBIENT_LEVELS table has never heard of
+          local bands = {}
+          for s, rec in pairs(recs) do
+            if rec.lo <= rec.hi then bands[s] = { rec.lo, rec.hi } end
+          end
+          picksCache.bands = bands
           -- the map's own slot levels, so ambient birds match the local
           -- level curve rather than a flat roll
           local levels = {}
@@ -1035,6 +1148,7 @@ return function(mod)
           base = love.math.random(3 + n * 5, 8 + n * 6)
         end
         local band = AMBIENT_LEVELS[pick.species]
+          or (picksCache.bands and picksCache.bands[pick.species])
         local level = base
         if band then
           level = math.max(band[1], math.min(band[2], base or band[1]))

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.5
+
+- Crystal 251 compatibility confirmed and pinned by a regression test:
+  free_fly keeps no species list, so Johto species registered into the
+  merged data mount, filter airborne encounters and gate on FLY
+  compatibility exactly like Kanto ones. A FLY-knowing Hoothoot offers
+  FREEFLY, a FLY-compatible Skarmory qualifies through a relaxing
+  mod's eligibility chain, and a flightless Steelix stays grounded.
+  No behavior change on a vanilla dex.
+
 ## 1.5.3
 
 - The sea-crossing confirm is now Pallet Town's send-off. Flying south

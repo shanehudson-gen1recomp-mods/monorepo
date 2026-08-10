@@ -12,4 +12,7 @@ return function(mod)
   mod.exports.whisper = function()
     mod.events:emit("mod.hook_fixture." .. "pong", {})
   end
+  mod.hooks:wrap("fixture.chain", function(next, ...)
+    return next(...)
+  end, 25)
 end

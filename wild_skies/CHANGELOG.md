@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.8.0
+
+- Derived skies: the ambient pools (sea routes, towns) now grow from
+  the world's own encounter tables instead of a fixed Gen 1 list. Any
+  FLYING species a dataset places in a wild slot joins the sky:
+  WATER/FLYING species patrol the sea pool, the rest the day pool,
+  weighted by how widely the world hosts them and leveled by the
+  slots the world itself deals them. On a vanilla dex this adds the
+  wild flyers the old list missed (Farfetch'd, the Doduo line,
+  Scyther); with an overhaul like Crystal 251 installed, Johto's
+  birds arrive without wild_skies naming a single species.
+- Night knowledge: a dataset that exports a period-aware ecology
+  (Crystal 251's `ecology.list()`) teaches wild_skies which of its
+  species fly only after dark; probed by capability, never by mod id.
+  Without such an export, a small hand list keeps the Zubat line and
+  the known Gen 2 owls nocturnal.
+- Crystal 251 declared as an optional dependency so it always loads
+  first and its rebuilt encounter tables and species are what the
+  sky reads.
+- The legendary sky roll stays Articuno/Zapdos/Moltres by design:
+  Crystal 251 stages Lugia and Ho-Oh at its own sanctuaries and the
+  sky will not undercut those encounters.
+
+(1.7.0 is the SKY TRAINERS series, developed on its own branch and
+not yet released; the number stays reserved for it.)
+
 ## 1.6.3
 
 - The GROUND BUMPS option is now called GROUND BATTLES. Same toggle,

@@ -203,6 +203,24 @@ return function(mod)
     return nil
   end
 
+  -- built-in veto: legendaries an overhaul stages on its own terms.
+  -- Crystal 251's Raikou and Entei roam and flee through a class
+  -- chain our turn loop replaces, and its sanctuary encounters (Lugia,
+  -- Ho-Oh, Celebi) are one-shot catches a partner would spoil, the
+  -- same reasoning wild_skies applies to its legendary sightings.
+  -- Species-keyed and inert on a dex that never rolls these wild.
+  local SOLITARY_LEGENDS = {
+    RAIKOU = true, ENTEI = true, SUICUNE = true,
+    LUGIA = true, HO_OH = true, CELEBI = true, MEW = true,
+  }
+  doubleVetoes[#doubleVetoes + 1] = {
+    id = "double_battles_solitary_legends",
+    veto = function(game, battle)
+      local mon = battle and battle.enemy and battle.enemy.mon
+      return mon and SOLITARY_LEGENDS[mon.species] or false
+    end,
+  }
+
   -- ally sources: a mod can pick WHICH party mon fights beside your
   -- lead (free_fly puts the mount there mid-air).  provide(game,
   -- battle) returns a party mon or nil to pass; the default is the
@@ -576,6 +594,11 @@ return function(mod)
       self.enemy2 = self:__dbRefill() or nil
       if not self.enemy2 then self.enemy.dbAnchor = 1 end
       self:syncSides()
+      if self.enemy2 then
+        Runtime.emit("battle.battler_switched", {
+          battle = self, side = self.sides[2], battler = self.enemy2,
+        })
+      end
       return true
     end
     return battle
@@ -1604,6 +1627,11 @@ return function(mod)
         battle = self, side = self.sides[2], battler = self.enemy,
         previous = previous,
       })
+      if self.enemy2 then
+        Runtime.emit("battle.battler_switched", {
+          battle = self, side = self.sides[2], battler = self.enemy2,
+        })
+      end
       if self.kind == "wild" then
         self:sayNext(Strings("Wild %s is\nstill in the fight!",
                              self.enemy.name))
@@ -1628,6 +1656,27 @@ return function(mod)
         previous = previous,
       })
       self:sayNext(Strings("%s stands\nits ground!", self.player.name))
+    end
+
+    -- the engine only announces lead battlers, so mods doing
+    -- per-battler setup off battle.battler_switched (Crystal 251
+    -- attaches its Gen 2 stat model there) would never meet the
+    -- second slots.  Announce them the moment the pair forms.
+    do
+      local Runtime = require("src.mods.Runtime")
+      pcall(function() battle:syncSides() end)
+      if battle.enemy2 then
+        Runtime.emit("battle.battler_switched", {
+          battle = battle, side = battle.sides and battle.sides[2],
+          battler = battle.enemy2,
+        })
+      end
+      if battle.player2 then
+        Runtime.emit("battle.battler_switched", {
+          battle = battle, side = battle.sides and battle.sides[1],
+          battler = battle.player2,
+        })
+      end
     end
 
     return battle
