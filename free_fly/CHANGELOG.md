@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.5.4
+## 1.5.5
 
 - Crystal 251 compatibility confirmed and pinned by a regression test:
   free_fly keeps no species list, so Johto species registered into the
