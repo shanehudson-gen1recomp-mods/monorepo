@@ -6,6 +6,9 @@
   retain their displayed positions when promoted to the current map. Each
   connected outdoor map keeps its own bounded resident flock; doors and other
   full transitions still refresh the population.
+- A transport-neutral shared-sky provider API lets session and replay mods
+  exchange bounded, revisioned field snapshots and claim encounters without
+  coupling Wild Skies to a particular networking implementation.
 
 ## 1.8.0
 

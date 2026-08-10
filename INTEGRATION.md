@@ -103,7 +103,8 @@ look for an unconditional restore first.
 
 ### Reading and consuming flyers
 
-`exports.flyerAt(cellX, cellY, radius)` returns `{ species, level }`
+`exports.flyerAt(cellX, cellY, radius)` returns
+`{ id, species, level, altitude }`
 for the nearest live flyer within the radius, or nil. Newborn flyers
 are invisible to this for their first moments, so nothing can collide
 with a bird the player hasn't had a chance to see. Since the sky got
@@ -160,6 +161,42 @@ walking player and starts its battle. Payload:
 flyer, whoever the caller was, with the same payload shape. Listen to
 this rather than to each consumer's own events if you want to track
 every bird that leaves the sky through the API.
+
+### Shared SKY providers
+
+A session or replay mod can own sky composition without Wild Skies knowing its
+transport. Register with
+`registerSharedSkyProvider(id, { requestClaim = function(map, id, context) ... end })`
+and unregister with the same id. `context.domain` is `SKY` and
+`context.airborne` says whether the contact came from a flying player.
+
+The provider exchanges normalized snapshots through
+`sharedSkyFieldSnapshot(map)`, `applySharedSkyFieldSnapshot(snapshot)`, and
+`sharedSkyNeighborMaps()`. A snapshot is:
+
+```lua
+{
+  domain = "SKY", map = "ROUTE_1", revision = 12,
+  localAuthority = false,
+  spawns = {
+    { id = "bird-7", species = "PIDGEY", level = 5,
+      x = 160, y = 96, alt = 56, vx = -32, vy = 4,
+      facing = "left", mode = "roam", bold = true },
+  },
+}
+```
+
+Snapshots are bounded, copied at the boundary, sorted by stable id, and reject
+malformed, duplicate-id, oversized, or stale-revision input. Only a field with
+`localAuthority = true` runs private flock AI and spawns new birds; replicas
+predict from canonical velocity between snapshots. Neighbor snapshots render
+through the same resident ghost surface as solo play.
+
+Shared contact is atomic. `takeFlyer` requests a claim and returns nil while it
+is pending. The provider answers with `grantSharedSkyFieldContact(map, id)` or
+`denySharedSkyFieldContact(map, id)`. It may also apply canonical removal with
+`removeSharedSkyFieldSpawn(id)`. `clearSharedSkyField()` drops shared state and
+returns immediately to the standalone resident-sky lifecycle.
 
 ## double_battles
 
