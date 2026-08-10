@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0
+
+- Second slots are announced: every partner battler (initial pair,
+  bench refills) now emits the engine's `battle.battler_switched`
+  event, which the engine itself only fires for lead battlers. Mods
+  doing per-battler setup off that event follow the whole double.
+  Crystal 251 attaches its Gen 2 stat model there, so partner slots
+  now fight with real Crystal stats instead of silently keeping the
+  Gen 1 math.
+- Built-in veto for solitary legends: Raikou, Entei, Suicune, Lugia,
+  Ho-Oh, Celebi and Mew never double. Crystal 251's roamers flee
+  through a class chain our turn loop replaces, and its sanctuary
+  catches are one-shot encounters a partner would spoil. Inert on a
+  dex that never rolls these wild.
+- Known limit with Crystal 251: its per-turn wild flee rolls (an
+  ordinary Teddiursa bolting) do not run inside a double, because the
+  doubles turn loop replaces the class chain the roll rides. Wilds
+  simply stay in a double until it ends.
+
 ## 0.4.0
 
 - Trainer pair sources: `registerTrainerPairSource` lets a mod put a
