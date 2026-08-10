@@ -35,6 +35,10 @@ return function(mod)
       default = false },
     { key = "rematches", label = "REMATCHES", type = "toggle",
       default = false },
+    { key = "trainer_density", label = "TRAINER DENSITY", type = "choice",
+      default = "med",
+      choices = { { "LOW", "low" }, { "MED", "med" },
+                  { "HIGH", "high" }, { "ULTRA", "ultra" } } },
   })
 
   -- a bird at or below this height can collide with a walking player;
@@ -46,12 +50,15 @@ return function(mod)
     med  = { cap = 6, cooldown = 4 },
     high = { cap = 10, cooldown = 2.5 },
   }
-  -- sky trainers punctuate rather than decorate: one roll per map
-  -- visit, minutes of cooldown, and only HIGH ever fields two at once
+  -- LOW and MED punctuate: one roll per map visit, minutes of
+  -- cooldown, a lone keeper.  HIGH and ULTRA trade the punctuation for
+  -- a bird-busy sky: continuous spawns on short cooldowns up to the
+  -- ambient bird caps (MED and HIGH birds respectively)
   local TRAINER_DENSITY = {
-    low  = { chance = 0.20, cooldown = 240, cap = 1 },
-    med  = { chance = 0.35, cooldown = 180, cap = 1 },
-    high = { chance = 0.50, cooldown = 120, cap = 2 },
+    low   = { chance = 0.20, cooldown = 240, cap = 1 },
+    med   = { chance = 0.35, cooldown = 180, cap = 1 },
+    high  = { chance = 1, cooldown = 8, cap = 6, continuous = true },
+    ultra = { chance = 1, cooldown = 4, cap = 10, continuous = true },
   }
   local function density()
     return DENSITY[mod.options:get("density")] or DENSITY.med
@@ -1588,9 +1595,10 @@ return function(mod)
         visitRolled = false
       end
       trainerCooldown = math.max(0, trainerCooldown - dt)
-      local cfg = TRAINER_DENSITY[mod.options:get("density")]
+      local cfg = TRAINER_DENSITY[mod.options:get("trainer_density")]
         or TRAINER_DENSITY.med
-      if visitRolled or trainerCooldown > 0 or #trainers >= cfg.cap then
+      if (visitRolled and not cfg.continuous) or trainerCooldown > 0
+         or #trainers >= cfg.cap then
         return
       end
       local def = ow.map.def

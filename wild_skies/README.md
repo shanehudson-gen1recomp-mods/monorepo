@@ -51,11 +51,12 @@ challenge is up to them.
 
 | Option | Default | What it does |
 |---|---|---|
-| SKY DENSITY | MED | LOW / MED / HIGH flyer caps and spawn cooldowns (also paces sky trainers) |
+| SKY DENSITY | MED | LOW / MED / HIGH flyer caps and spawn cooldowns |
 | BIRD SIZE | NORMAL | SMALL / NORMAL / LARGE / HUGE draw scale on top of dex height |
 | GROUND BATTLES | ON | low birds (perched, landing, flushed) can battle a walking player |
 | SKY TRAINERS | OFF | Bird Keepers cross the wild routes on their birds and can challenge you |
 | REMATCHES | OFF | OFF: a beaten sky trainer stays beaten for the save; ON: they may return on a later visit |
+| TRAINER DENSITY | MED | LOW / MED: a rare lone keeper; HIGH / ULTRA: keepers as busy as the birds |
 
 ## Works well with
 

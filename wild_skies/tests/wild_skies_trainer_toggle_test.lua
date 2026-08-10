@@ -114,6 +114,24 @@ local sid, why = api.summonFlyer(12, 12, { radius = 3 })
 T.eq(sid, nil, "summonFlyer blind to trainers")
 T.eq(why, "nobody near", "with the empty-sky reason")
 
+-- ULTRA trainer density fills the sky like birds: continuous spawns
+-- up to a ten-strong cap, no one-roll-per-visit gate
+run.loader.modOptions = run.loader.modOptions or {}
+run.loader.modOptions.wild_skies = { trainers = true,
+                                     trainer_density = "ultra" }
+local peak = 0
+for _ = 1, 440 do
+  OC.__wildSkiesTick(ow, 0.5)
+  local n = #dbg.list()
+  if n > peak then peak = n end
+  T.check(n <= 10, n <= 10 and "within the cap" or "cap exceeded")
+end
+T.check(peak >= 6, "ULTRA gets bird-busy (peak " .. peak .. " >= 6)")
+run.loader.modOptions.wild_skies = {}
+for _, extra in ipairs(dbg.list()) do extra.dead = true end
+OC.__wildSkiesTick(ow, 0.05)
+T.eq(#dbg.list(), 0, "test sky cleared")
+
 -- a dead trainer takes its rider with it
 tr.dead = true
 OC.__wildSkiesTick(ow, 0.05)
