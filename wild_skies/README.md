@@ -32,8 +32,8 @@ With SKY TRAINERS on (it ships off), the sky occasionally holds a
 person too: one of the game's own Bird Keepers, riding the strongest
 FLY-capable bird from his real roster (the rare keeper without one
 borrows a Pidgeot, and it fights on his bench too). They cross the
-wild routes with purpose, hover to scan ahead, sometimes rest on a
-roof, and they can spot you: in the air within their altitude band
+wild routes with purpose, scanning the sky ahead as they fly,
+sometimes resting on a roof, and they can spot you: in the air within their altitude band
 (whichever flight mod carries you), or on the ground when they perch
 or fly low. A sighting plays the classic sting and "!", the keeper
 swoops to your side, and his own challenge line opens his own battle,

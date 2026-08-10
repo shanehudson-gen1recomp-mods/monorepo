@@ -1177,12 +1177,13 @@ return function(mod)
   end
 
   -- the vanilla scan feel in three dimensions: a forward cone (range
-  -- 5, flaring one cell wide from the third), checked only at the
-  -- hover and perch moments on a slow cadence.  Airborne players are
-  -- seen within one altitude band; walkers only by a trainer that is
-  -- perched or flying low.  All the vanilla early-outs apply.
-  local SIGHT_RANGE = 5
-  local SIGHT_BAND = 20
+  -- 6, flaring to two cells wide) checked on a slow cadence the whole
+  -- time the keeper commutes or perches; a free-flying player crosses
+  -- a hover-only window too rarely for sight to ever land.  Airborne
+  -- players are seen within one altitude band; walkers only by a
+  -- trainer that is perched or flying low.  Vanilla early-outs apply.
+  local SIGHT_RANGE = 6
+  local SIGHT_BAND = 24
   local SIGHT_DIRVEC = { up = { 0, -1 }, down = { 0, 1 },
                          left = { -1, 0 }, right = { 1, 0 } }
 
@@ -1200,7 +1201,8 @@ return function(mod)
     local ahead = dx * d[1] + dy * d[2]
     local side = math.abs(dx * d[2]) + math.abs(dy * d[1])
     if ahead < 1 or ahead > SIGHT_RANGE then return end
-    if side > (ahead >= 3 and 1 or 0) then return end
+    local flare = ahead >= 4 and 2 or ahead >= 2 and 1 or 0
+    if side > flare then return end
     local airborne, playerAlt = flightState(p)
     if airborne then
       local myAlt = self.mode == "perch" and (self.perchAlt or 0)
@@ -1304,8 +1306,7 @@ return function(mod)
   function SkyTrainer:tick(ow, dt)
     self.t = self.t + dt
     self.cooldownT = math.max(0, (self.cooldownT or 0) - dt)
-    if (self.mode == "commute" and (self.hoverT or 0) > 0)
-       or self.mode == "perch" then
+    if self.mode == "commute" or self.mode == "perch" then
       self.scanT = (self.scanT or 0) + dt
       if self.scanT >= 0.25 then
         self.scanT = 0

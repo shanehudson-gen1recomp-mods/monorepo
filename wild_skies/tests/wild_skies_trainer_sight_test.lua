@@ -141,17 +141,27 @@ Game.mods.exports.some_flight_mod = {
   altitude = function() return playerAlt end,
 }
 
--- while moving (no hover), the cone never runs
-tr.mode = "commute"
+-- scanning runs while commuting too, hover or not: a keeper in
+-- flight keeps his eyes ahead (real 3D flight rarely crosses a
+-- hover-only window)
 tr.alt = 40
 flying, playerAlt = true, 40
 spotted, tr.spotted = nil, nil
 tr.cooldownT = 0
 ow.engaging, ow.emote = nil, nil
+tr.mode = "commute"
 tr.hoverT = 0
 tr.hoverIn = 60
-OC.__wildSkiesTick(ow, 0.1)
-T.eq(spotted, nil, "no scanning mid-flap")
+for _ = 1, 5 do
+  OC.__wildSkiesTick(ow, 0.1)
+  if spotted then break end
+  tr.mode = "commute"
+  tr.px, tr.py = 160, 160
+  tr.cellX, tr.cellY = 10, 10
+  tr.facing = "right"
+  tr.hoverT = 0
+end
+T.check(spotted ~= nil, "a commuting keeper scans mid-flight")
 
 -- the trainer code never names a flight mod: capability probe only
 local src = assert(io.open((os.getenv("MOD_DIR") or "mods/wild_skies")
