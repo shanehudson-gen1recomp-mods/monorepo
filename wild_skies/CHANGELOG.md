@@ -9,7 +9,8 @@
   spot you: airborne within one altitude band on whichever flight
   system you ride (the shared isFlying/altitude exports, so free_fly
   and Dramatic Sky Ride both count), or on foot when the keeper is
-  perched or low. The classic sting and "!" lead into the donor's own
+  perched or low. Any keeper may cross any wild sky from the first
+  badge-less route onward. The classic sting and "!" lead into the donor's own
   challenge line, battle, payout and dialogue. About a third are
   hailers who only chat, and beaten keepers demote to hailers.
 - REMATCHES (option, default OFF): OFF remembers defeats in the save,

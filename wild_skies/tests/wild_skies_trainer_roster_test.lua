@@ -42,9 +42,6 @@ for i, d in ipairs(dbg.donors) do
     and h.after ~= nil,
     ("donor %d: header %s[%d] has battle/won/after"):format(
       i, tostring(d.donor.map), d.donor.index))
-  T.check(type(d.badges) == "table" and d.badges[1] >= 0
-    and d.badges[1] <= d.badges[2] and d.badges[2] <= 8,
-    ("donor %d: sane badge band"):format(i))
 end
 
 -- a real donor rides its own strongest FLY-capable mon

@@ -124,31 +124,31 @@ return function(mod)
 
   -- sky trainer donors: real map trainers whose party, payout, AI and
   -- dialogue are borrowed wholesale.  donor = the trainer_headers key
-  -- (map label + object index) their battle/won/after text reads from;
-  -- badges = the badge-count window the donor may spawn in.  All 15
-  -- map-placed Bird Keepers carry full headers; these ten span the
-  -- level curve L25-34 with species variety.
+  -- (map label + object index) their battle/won/after text reads from.
+  -- All 15 map-placed Bird Keepers carry full headers; these ten span
+  -- the level curve L25-34 with species variety, and any of them may
+  -- cross any wild sky (no badge gating: the sky is not a gym).
   local SKY_TRAINER_DONORS = {
     { class = "OPP_BIRD_KEEPER", party = 2,
-      donor = { map = "Route13", index = 6 },  badges = { 3, 5 } },
+      donor = { map = "Route13", index = 6 } },
     { class = "OPP_BIRD_KEEPER", party = 6,
-      donor = { map = "Route15", index = 3 },  badges = { 3, 5 } },
+      donor = { map = "Route15", index = 3 } },
     { class = "OPP_BIRD_KEEPER", party = 15,
-      donor = { map = "Route14", index = 2 },  badges = { 3, 5 } },
+      donor = { map = "Route14", index = 2 } },
     { class = "OPP_BIRD_KEEPER", party = 17,
-      donor = { map = "Route14", index = 4 },  badges = { 4, 6 } },
+      donor = { map = "Route14", index = 4 } },
     { class = "OPP_BIRD_KEEPER", party = 7,
-      donor = { map = "Route15", index = 4 },  badges = { 4, 6 } },
+      donor = { map = "Route15", index = 4 } },
     { class = "OPP_BIRD_KEEPER", party = 1,
-      donor = { map = "Route13", index = 1 },  badges = { 4, 6 } },
+      donor = { map = "Route13", index = 1 } },
     { class = "OPP_BIRD_KEEPER", party = 8,
-      donor = { map = "Route18", index = 1 },  badges = { 4, 6 } },
+      donor = { map = "Route18", index = 1 } },
     { class = "OPP_BIRD_KEEPER", party = 11,
-      donor = { map = "Route20", index = 7 },  badges = { 5, 7 } },
+      donor = { map = "Route20", index = 7 } },
     { class = "OPP_BIRD_KEEPER", party = 4,
-      donor = { map = "Route14", index = 5 },  badges = { 5, 8 } },
+      donor = { map = "Route14", index = 5 } },
     { class = "OPP_BIRD_KEEPER", party = 9,
-      donor = { map = "Route18", index = 2 },  badges = { 5, 8 } },
+      donor = { map = "Route18", index = 2 } },
   }
 
   -- HM02 compatibility off the species' own machine list, the same
@@ -1605,19 +1605,8 @@ return function(mod)
       if not outside or forest or town then return end
       visitRolled = true
       if love.math.random() >= cfg.chance then return end
-      local badges = 0
-      pcall(function()
-        local Badges = require("src.inventory.Badges")
-        badges = Badges.count(Game.data, Game.save) or 0
-      end)
-      local pool = {}
-      for i, d in ipairs(SKY_TRAINER_DONORS) do
-        if badges >= d.badges[1] and badges <= d.badges[2] then
-          pool[#pool + 1] = i
-        end
-      end
-      if #pool == 0 then return end
-      local tr = SkyTrainer.new(Game, ow, pool[love.math.random(#pool)])
+      local tr = SkyTrainer.new(Game, ow,
+        love.math.random(#SKY_TRAINER_DONORS))
       if tr then
         trainers[#trainers + 1] = tr
         table.insert(ow.entities, tr)
