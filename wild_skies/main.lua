@@ -187,6 +187,10 @@ return function(mod)
 
   local flyers = {}
   local trainers = {}
+  -- the trainer battle this mod just queued (set at standoff, consumed
+  -- by battle.started / the trainer.party bench fallback); exactly one
+  -- can be pending at a time because ow.engaging serializes engages
+  local expectingSkyBattle = nil
   local battleRest = 0
   local lastBump = nil
   local summonFail -- forward: every summon ends in exactly one event
@@ -1136,6 +1140,75 @@ return function(mod)
         cellX = self.cellX, cellY = self.cellY,
       })
     end)
+    self:beginEngage(ow)
+  end
+
+  -- the vanilla choreography with our own actor: freeze, sting, the
+  -- 60-frame "!" (the engine's emote tick runs onDone), then the swoop
+  function SkyTrainer:beginEngage(ow)
+    ow.engaging = true
+    pcall(function()
+      local Game = require("src.core.Game")
+      require("src.core.Music").play(Game.data, "Music_MeetMaleTrainer")
+    end)
+    local me = self
+    self.mode = "await"
+    ow.emote = { npc = self, frames = 60, onDone = function()
+      me.mode = "swoop"
+    end }
+  end
+
+  -- every path out of an engage runs through here, so ow.engaging can
+  -- never stick: refused queues, watchdog timeouts, battle handoffs
+  function SkyTrainer:disengage(ow, mode)
+    if ow then ow.engaging = false end
+    self.cooldownT = 60
+    self.spotted = nil
+    self.standoffT = nil
+    self.mode = mode or "commute"
+  end
+
+  function SkyTrainer:standoff(ow)
+    self.mode = "standoff"
+    self.standoffT = 0
+    local p = ow.player
+    self.facing = self.cellX > p.cellX and "left"
+      or self.cellX < p.cellX and "right"
+      or (self.cellY > p.cellY and "up" or "down")
+    local Game = require("src.core.Game")
+    local h
+    pcall(function()
+      h = Game.data:trainerHeader(self.donor.map, self.donor.index)
+    end)
+    pcall(function()
+      mod.events:emit("mod.wild_skies.trainer_engaged", {
+        oppClass = self.donor.class, partyIndex = self.donor.party,
+        cellX = self.cellX, cellY = self.cellY,
+      })
+    end)
+    if self.hailer then
+      -- a hail is its whole payoff: the donor's after-battle chat
+      -- line, then off; the script runner freezes input on its own
+      if h and h.after then
+        pcall(function()
+          mod.world:queueScript({ { "show_text", h.after } })
+        end)
+      end
+      self:disengage(ow, "leave")
+      return
+    end
+    local rows = {}
+    if h and h.battle then rows[#rows + 1] = { "show_text", h.battle } end
+    rows[#rows + 1] = { "start_battle", "trainer",
+                        self.donor.class, self.donor.party }
+    expectingSkyBattle = { trainer = self, donor = self.donor,
+                           mount = self.mount }
+    local ok = false
+    pcall(function() ok = mod.world:queueScript(rows) == true end)
+    if not ok then
+      expectingSkyBattle = nil
+      self:disengage(ow, "commute")
+    end
   end
 
   function SkyTrainer:tick(ow, dt)
@@ -1205,6 +1278,39 @@ return function(mod)
       if self.alt >= (self.altTarget or SKY_BAND[1]) then
         self.mode = "commute"
       end
+    elseif self.mode == "await" or self.mode == "standby" then
+      -- holding: under the "!" bubble, or waiting out the battle
+    elseif self.mode == "swoop" then
+      local p = ow.player
+      local sx = p.cellX + ((self.cellX >= p.cellX) and 1 or -1)
+      local tx, ty = sx * 16, p.cellY * 16
+      local dx, dy = tx - self.px, ty - self.py
+      local dist = math.abs(dx) + math.abs(dy)
+      local airborne, pAlt = flightState(p)
+      local wantAlt = airborne and pAlt or LOW_ALT
+      if self.alt > wantAlt then
+        self.alt = math.max(wantAlt, self.alt - CLIMB * dt)
+      elseif self.alt < wantAlt then
+        self.alt = math.min(wantAlt, self.alt + CLIMB * dt)
+      end
+      if dist > 6 then
+        turnToward(self, math.atan2(dy, dx), TURN_MAX * 2 * dt)
+        trainerStep(self, dt, 1.5)
+      else
+        self.px, self.py = tx, ty
+        self.cellX, self.cellY = sx, p.cellY
+        self:standoff(ow)
+      end
+    elseif self.mode == "standoff" then
+      self.standoffT = (self.standoffT or 0) + dt
+      if self.standoffT > 4 then
+        -- the battle never came (a foreign script, a refused push):
+        -- the freeze must not outlive the moment
+        if expectingSkyBattle and expectingSkyBattle.trainer == self then
+          expectingSkyBattle = nil
+        end
+        self:disengage(ow, "commute")
+      end
     else -- leave
       trainerStep(self, dt, 1.2)
       if self.t > (self.visitFor or 30) + 20 then self.dead = true end
@@ -1250,6 +1356,21 @@ return function(mod)
     return self.sprite, self.px, self.py - trainerLift(self),
            self.facing, trainerFlap(self), false, false
   end
+
+  -- the queued battle took the stack: hand over cleanly and wait it
+  -- out on the spot (battle.ended decides what happens after, and the
+  -- outcome handling owns the record from here)
+  mod.events:on("battle.started", function()
+    if not expectingSkyBattle then return end
+    local rec = expectingSkyBattle
+    expectingSkyBattle = nil
+    rec.live = true
+    local tr = rec.trainer
+    if tr and not tr.dead then
+      local Game = require("src.core.Game")
+      tr:disengage(Game and Game.overworld, "standby")
+    end
+  end)
 
   -- test/scenario seam: spawn ignores the option and the roll gates
   mod.exports.__skyTrainerDebug.spawn = function(donorIndex)

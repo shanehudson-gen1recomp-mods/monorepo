@@ -75,12 +75,23 @@ local function hoveringTrainer()
   return tr
 end
 
-local function scanFor(tr, seconds)
+-- each case scans from a clean slate: spotting now launches the
+-- engage (freeze + emote + await), so the harness clears those side
+-- effects and holds the wanted mode; busy = the overworld is engaged
+-- by someone else for the whole scan
+local function scanFor(tr, seconds, mode, busy)
   spotted = nil
   tr.spotted = nil
+  tr.cooldownT = 0
+  ow.engaging = busy and true or nil
+  ow.emote = nil
+  mode = mode or "commute"
   for _ = 1, math.ceil(seconds / 0.1) do
+    if not tr.spotted then
+      tr.mode = mode
+      if mode == "commute" then tr.hoverT = 5 end
+    end
     OC.__wildSkiesTick(ow, 0.1)
-    tr.hoverT = 5
   end
   return spotted
 end
@@ -108,13 +119,13 @@ flying, playerAlt = false, 0
 T.eq(scanFor(tr, 1), nil, "walkers are safe from high patrols")
 
 -- grounded player vs a perched trainer: spotted
-tr.mode = "perch"
 tr.alt, tr.perchAlt = 0, 0
-T.check(scanFor(tr, 1) ~= nil, "a perched trainer spots the walker")
+T.check(scanFor(tr, 1, "perch") ~= nil,
+  "a perched trainer spots the walker")
 
 -- a busy overworld suppresses every scan
-ow.engaging = true
-T.eq(scanFor(tr, 1), nil, "no sighting while the overworld engages")
+T.eq(scanFor(tr, 1, "perch", true), nil,
+  "no sighting while the overworld engages")
 ow.engaging = nil
 
 -- while moving (no hover), the cone never runs
@@ -122,6 +133,8 @@ tr.mode = "commute"
 tr.alt = 40
 flying, playerAlt = true, 40
 spotted, tr.spotted = nil, nil
+tr.cooldownT = 0
+ow.engaging, ow.emote = nil, nil
 tr.hoverT = 0
 tr.hoverIn = 60
 OC.__wildSkiesTick(ow, 0.1)
