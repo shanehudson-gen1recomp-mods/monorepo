@@ -390,16 +390,37 @@ return function(mod)
     return enc
   end)
 
-  -- free_fly's exported flight state when it is around, else the raw
-  -- field it stamps on the player
-  local function playerAirborne(p)
-    local ff = mod.find("free_fly")
-    local api = ff and ff.exports and ff.exports.isFlying
-    if api then
-      local ok, v = pcall(api)
-      if ok then return v == true end
+  -- flight state by capability probe: any loaded mod exporting the
+  -- shared isFlying/altitude contract counts (never key on a mod id;
+  -- free_fly and Dramatic Sky Ride both speak it).  Airborne when ANY
+  -- system reports flying; the raw player field is the last resort.
+  local function flightState(p)
+    local Game = require("src.core.Game")
+    local exportsById = Game.mods and Game.mods.exports
+    local sawProbe = false
+    if exportsById then
+      for _, ex in pairs(exportsById) do
+        if type(ex) == "table" and type(ex.isFlying) == "function"
+           and type(ex.altitude) == "function" then
+          sawProbe = true
+          local ok, up = pcall(ex.isFlying)
+          if ok and up == true then
+            local okA, alt = pcall(ex.altitude)
+            return true, okA and tonumber(alt) or 0
+          end
+        end
+      end
     end
-    return p ~= nil and p.freeFlying == true
+    if sawProbe then return false, 0 end
+    if p ~= nil and p.freeFlying == true then
+      return true, tonumber(p.freeFlyAlt) or 0
+    end
+    return false, 0
+  end
+
+  local function playerAirborne(p)
+    local airborne = flightState(p)
+    return airborne
   end
 
   -- the map's grass slots filtered to FLYING types and the time of day;
@@ -961,7 +982,7 @@ return function(mod)
 
   -- the rider ghost: the donor's own overworld figure seated on the
   -- mount, a separate passable entity so the voxel pass can billboard
-  -- both (same trick as free_fly's Rider)
+  -- both (the same trick the flight mods use for their own riders)
   local TrainerRider = {}
   TrainerRider.__index = TrainerRider
 
@@ -1075,8 +1096,59 @@ return function(mod)
       or (math.sin(self.heading) < 0 and "up" or "down")
   end
 
+  -- the vanilla scan feel in three dimensions: a forward cone (range
+  -- 5, flaring one cell wide from the third), checked only at the
+  -- hover and perch moments on a slow cadence.  Airborne players are
+  -- seen within one altitude band; walkers only by a trainer that is
+  -- perched or flying low.  All the vanilla early-outs apply.
+  local SIGHT_RANGE = 5
+  local SIGHT_BAND = 20
+  local SIGHT_DIRVEC = { up = { 0, -1 }, down = { 0, 1 },
+                         left = { -1, 0 }, right = { 1, 0 } }
+
+  function SkyTrainer:scanForPlayer(ow)
+    if self.spotted or (self.cooldownT or 0) > 0 then return end
+    if ow.engaging or ow.emote or battleRest > 0 then return end
+    local Game = require("src.core.Game")
+    if Game.stack and Game.stack.top and Game.stack:top() ~= ow then
+      return
+    end
+    local p = ow.player
+    if not p then return end
+    local d = SIGHT_DIRVEC[self.facing or "down"]
+    local dx, dy = p.cellX - self.cellX, p.cellY - self.cellY
+    local ahead = dx * d[1] + dy * d[2]
+    local side = math.abs(dx * d[2]) + math.abs(dy * d[1])
+    if ahead < 1 or ahead > SIGHT_RANGE then return end
+    if side > (ahead >= 3 and 1 or 0) then return end
+    local airborne, playerAlt = flightState(p)
+    if airborne then
+      local myAlt = self.mode == "perch" and (self.perchAlt or 0)
+        or self.alt or 0
+      if math.abs(myAlt - playerAlt) > SIGHT_BAND then return end
+    else
+      if self.mode ~= "perch" and (self.alt or 0) > LOW_ALT then return end
+    end
+    self.spotted = true
+    pcall(function()
+      mod.events:emit("mod.wild_skies.trainer_spotted", {
+        oppClass = self.donor.class, partyIndex = self.donor.party,
+        cellX = self.cellX, cellY = self.cellY,
+      })
+    end)
+  end
+
   function SkyTrainer:tick(ow, dt)
     self.t = self.t + dt
+    self.cooldownT = math.max(0, (self.cooldownT or 0) - dt)
+    if (self.mode == "commute" and (self.hoverT or 0) > 0)
+       or self.mode == "perch" then
+      self.scanT = (self.scanT or 0) + dt
+      if self.scanT >= 0.25 then
+        self.scanT = 0
+        self:scanForPlayer(ow)
+      end
+    end
     if self.mode == "commute" then
       if (self.hoverT or 0) > 0 then
         -- the hover is the scan moment (sight lands in a later task)
