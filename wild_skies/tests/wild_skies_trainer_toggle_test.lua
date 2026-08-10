@@ -38,6 +38,8 @@ package.loaded["src.core.Game"] = {
 Data.sprites = Data.sprites or {}
 Data.sprites.SPRITE_BIRD = Data.sprites.SPRITE_BIRD
   or { image = "fixture_bird.png", frames = 6 }
+Data.sprites.SPRITE_COOLTRAINER_M = Data.sprites.SPRITE_COOLTRAINER_M
+  or { image = "fixture_trainer.png", frames = 6 }
 
 local run = T.sdk.loadMod(os.getenv("MOD_DIR") or "mods/wild_skies",
   { data = Data })
@@ -80,10 +82,17 @@ bird.dead = true
 OC.__wildSkiesTick(ow, 0.05)
 
 -- the debug seam spawns regardless of the option (tests and scenario
--- work), placing exactly one trainer
+-- work), placing the trainer and its rider ghost
+local before = #ow.entities
 local tr = dbg.spawn(1)
 T.check(tr ~= nil, "debug spawn returns the trainer")
 T.eq(#dbg.list(), 1, "trainer in its own list")
+T.eq(#ow.entities - before, 2, "mount and rider both attached")
+T.check(tr.rider ~= nil, "rider ghost exists")
+local rSprite, _, rY = tr.rider:pose()
+local _, _, mY = tr:pose()
+T.check(rSprite ~= nil, "rider has a sprite")
+T.eq(rY, mY - 6, "rider seated 6px above the mount")
 T.eq(tr.donor.class, "OPP_BIRD_KEEPER", "carries its donor class")
 T.check(type(tr.donor.party) == "number", "and party index")
 T.check(tr.mount and tr.mount.species ~= nil, "rides a mount")
@@ -104,6 +113,14 @@ T.eq(api.takeFlockmate(12, 12, 3), nil, "takeFlockmate blind to trainers")
 local sid, why = api.summonFlyer(12, 12, { radius = 3 })
 T.eq(sid, nil, "summonFlyer blind to trainers")
 T.eq(why, "nobody near", "with the empty-sky reason")
+
+-- a dead trainer takes its rider with it
+tr.dead = true
+OC.__wildSkiesTick(ow, 0.05)
+T.eq(#dbg.list(), 0, "dead trainer left the list")
+for _, e in ipairs(ow.entities) do
+  T.check(e ~= tr and e ~= tr.rider, "neither mount nor rider lingers")
+end
 
 run.release()
 T.finish("wild_skies_trainer_toggle")

@@ -951,6 +951,74 @@ return function(mod)
   local SkyTrainer = {}
   SkyTrainer.__index = SkyTrainer
 
+  local function trainerLift(self)
+    if self.mode == "perch" then
+      if (self.perchAlt or 0) > 0 and voxelOn() then return self.perchAlt end
+      return 0
+    end
+    return self.alt + math.sin(self.t * 3) * 1.5
+  end
+
+  -- the rider ghost: the donor's own overworld figure seated on the
+  -- mount, a separate passable entity so the voxel pass can billboard
+  -- both (same trick as free_fly's Rider)
+  local TrainerRider = {}
+  TrainerRider.__index = TrainerRider
+
+  function TrainerRider.new(host, sprite)
+    return setmetatable({ host = host, sprite = sprite, passable = true,
+                          px = host.px, py = host.py,
+                          cellX = host.cellX, cellY = host.cellY },
+                        TrainerRider)
+  end
+
+  function TrainerRider:pose()
+    local h = self.host
+    return self.sprite, h.px, h.py - trainerLift(h) - 6,
+           h.facing, 0, false, false
+  end
+
+  function TrainerRider:draw(camX, camY)
+    local h = self.host
+    local sy = math.floor(h.py - trainerLift(h) - 6 + 0.5)
+    self.sprite:draw(math.floor(h.px + 0.5), sy, camX, camY,
+                     h.facing, 0, false)
+  end
+
+  -- the donor's map object names the sheet the rider wears (gen 1
+  -- dresses Bird Keepers in the cooltrainer sheet); resolved by header
+  -- label, cached per sprite id
+  local riderSpriteCache = {}
+  local labelToMap = nil
+  local function donorRiderSprite(game, donor)
+    if labelToMap == nil then
+      labelToMap = {}
+      for _, def in pairs(game.data.maps or {}) do
+        if def.label then labelToMap[def.label] = def end
+      end
+    end
+    local spriteId = "SPRITE_COOLTRAINER_M"
+    local def = labelToMap[donor.map]
+    for _, obj in ipairs((def and def.objects) or {}) do
+      if obj.index == donor.index and obj.sprite then
+        spriteId = obj.sprite
+        break
+      end
+    end
+    if riderSpriteCache[spriteId] == nil then
+      local sdef = game.data.sprites and game.data.sprites[spriteId]
+      if sdef then
+        local SpriteRenderer = require("src.render.SpriteRenderer")
+        local ok, r = pcall(SpriteRenderer.new, sdef,
+          "wild_skies_rider_" .. spriteId)
+        riderSpriteCache[spriteId] = ok and r or false
+      else
+        riderSpriteCache[spriteId] = false
+      end
+    end
+    return riderSpriteCache[spriteId] or nil
+  end
+
   function SkyTrainer.new(game, ow, donorIndex)
     local donor = SKY_TRAINER_DONORS[donorIndex]
     if not donor then return nil end
@@ -991,6 +1059,10 @@ return function(mod)
     self.t = 0
     self.cellX = math.floor((self.px + 8) / 16)
     self.cellY = math.floor((self.py + 8) / 16)
+    local riderSprite = donorRiderSprite(game, self.donor)
+    if riderSprite then
+      self.rider = TrainerRider.new(self, riderSprite)
+    end
     return self
   end
 
@@ -1067,15 +1139,11 @@ return function(mod)
     end
     self.cellX = math.floor((self.px + 8) / 16)
     self.cellY = math.floor((self.py + 8) / 16)
-    airEdgeCheck(self, ow, dt)
-  end
-
-  local function trainerLift(self)
-    if self.mode == "perch" then
-      if (self.perchAlt or 0) > 0 and voxelOn() then return self.perchAlt end
-      return 0
+    if self.rider then
+      self.rider.px, self.rider.py = self.px, self.py
+      self.rider.cellX, self.rider.cellY = self.cellX, self.cellY
     end
-    return self.alt + math.sin(self.t * 3) * 1.5
+    airEdgeCheck(self, ow, dt)
   end
 
   local function trainerFlap(self)
@@ -1120,6 +1188,7 @@ return function(mod)
     if not tr then return nil end
     trainers[#trainers + 1] = tr
     table.insert(ow.entities, tr)
+    if tr.rider then table.insert(ow.entities, tr.rider) end
     return tr
   end
   mod.exports.__skyTrainerDebug.list = function() return trainers end
@@ -1185,6 +1254,7 @@ return function(mod)
         tr:tick(ow, dt)
         if tr.dead then
           detach(ow, tr)
+          if tr.rider then detach(ow, tr.rider) end
           table.remove(trainers, i)
         end
       end
@@ -1227,6 +1297,7 @@ return function(mod)
       if tr then
         trainers[#trainers + 1] = tr
         table.insert(ow.entities, tr)
+        if tr.rider then table.insert(ow.entities, tr.rider) end
         trainerCooldown = cfg.cooldown
         mod.log:info("a bird keeper is crossing %s on a %s (L%d)",
           id, tostring(tr.mount.species), tr.mount.level or 0)
