@@ -506,6 +506,7 @@ return function(env)
         s.mons, s.covering, s.coversLead = {}, {}, {}
         s.spacing, s.broken, s.at = {}, {}, {}
         s.warned = false
+        s.tierLogged = nil
         s.forBattle = battle
       end
       if not s.arena and type(Ov.arena) == "function" then
@@ -518,6 +519,7 @@ return function(env)
       -- original runs so the borrow can hide the lead's model in the
       -- same update that needs it hidden
       local borrow = {}
+      local why = {}
       for _, side in ipairs({ "enemy", "player" }) do
         local b = partnerOf(battle, side)
         local mon = s.mons[side]
@@ -561,6 +563,14 @@ return function(env)
         s.covering[side] = (live and ready and s.arena ~= nil
                             and not morph and not subbed
                             and not s.broken[side]) and true or false
+        why[side] = s.covering[side] and "models"
+          or not live and "single"
+          or s.broken[side] and "broken"
+          or morph and "transform"
+          or subbed and "substitute"
+          or not ready and "no-pack"
+          or not s.arena and "no-arena"
+          or "cards"
         local trainerNow
         if side == "enemy" then
           trainerNow = battle.showEnemyTrainer and battle.trainerPic
@@ -568,6 +578,17 @@ return function(env)
           trainerNow = battle.showPlayerBack and battle.playerBackPic
         end
         borrow[side] = live and not s.covering[side] and not trainerNow
+      end
+      -- one line whenever a side changes tier, so a play test that
+      -- looks wrong can be read off the console instead of guessed at
+      -- from a screenshot
+      local tier = why.enemy .. "/" .. why.player
+      if s.tierLogged ~= tier then
+        s.tierLogged = tier
+        pcall(function()
+          env.log:info("stadium pair: enemy=%s player=%s", why.enemy,
+                       why.player)
+        end)
       end
 
       local savedSE, savedTP, savedSP, savedBP
@@ -827,7 +848,22 @@ return function(env)
         end
       end
       st.__doubleBattlesCoversHook = makeCoversHook(st)
-      if pair then pcall(wirePair, st, pair, ov) end
+      -- a pair that fails to wire must say so: silently swallowed, a
+      -- doubles battle on the model rungs draws the cards in front of
+      -- the standing models and nothing anywhere explains why
+      if pair then
+        local okW, errW = pcall(wirePair, st, pair, ov)
+        if okW then
+          pcall(function()
+            env.log:info("stadium pair tier wired")
+          end)
+        else
+          pcall(function()
+            env.log:warn("stadium pair tier failed to wire; doubles "
+              .. "stay on the composed cards: %s", tostring(errW))
+          end)
+        end
+      end
     end
     wired[ov] = true
   end
