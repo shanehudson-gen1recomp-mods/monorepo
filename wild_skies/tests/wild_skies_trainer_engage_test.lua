@@ -40,6 +40,7 @@ local ow = {
 local flying, playerAlt = true, 40
 local Game = {
   data = Data,
+  save = { flags = {} },
   overworld = ow,
   renderer = { worldViewSize = function() return 160, 144 end },
   stack = { top = function() return ow end },
@@ -159,6 +160,65 @@ for _, row in ipairs(hailRows) do
 end
 T.eq(ow.engaging, false, "hailer releases the freeze at once")
 T.eq(tr4.mode, "leave", "and takes its leave")
+
+-- ------- outcomes and the REMATCHES setting
+
+local defeated
+run.loader.events:on("mod.wild_skies.trainer_defeated",
+  function(ev) defeated = ev end)
+
+-- a win under REMATCHES OFF stamps the save flag, demotes the trainer
+-- and retires the donor's fighter role for the save
+queued = {}
+local tr5 = freshTrainer(false)
+driveToStandoff(tr5)
+T.eq(tr5.mode, "standoff", "standoff for the win case")
+run.loader.events:emit("battle.started", {})
+T.eq(tr5.mode, "standby", "waiting out its battle")
+run.loader.events:emit("battle.ended", { result = "win" })
+T.check(defeated ~= nil and defeated.oppClass == "OPP_BIRD_KEEPER",
+  "trainer_defeated emitted")
+local flagName = "WILD_SKIES_SKY_TRAINER_OPP_BIRD_KEEPER_"
+  .. tr5.donor.party
+T.eq(Game.save.flags[flagName], true, "defeat flag stamped")
+T.eq(dbg.donorAllowed(1, true), false, "donor fields no more fighters")
+T.eq(dbg.donorAllowed(1, false), true, "but may still hail")
+T.eq(tr5.hailer, true, "the beaten trainer is a hailer now")
+T.check(tr5.mode ~= "standby", "and moved on")
+tr5.dead = true
+OC.__wildSkiesTick(ow, 0.05)
+
+-- a run leaves no mark beyond the personal cooldown
+Game.save.flags = {}
+defeated = nil
+queued = {}
+local tr6 = freshTrainer(false)
+driveToStandoff(tr6)
+run.loader.events:emit("battle.started", {})
+run.loader.events:emit("battle.ended", { result = "run" })
+T.eq(defeated, nil, "no defeat on a run")
+T.eq(next(Game.save.flags), nil, "no flag on a run")
+T.eq(dbg.donorAllowed(1, true), true, "donor still fields fighters")
+T.check((tr6.cooldownT or 0) > 0, "cooldown after the run")
+T.eq(tr6.hailer, false, "still a fighter")
+tr6.dead = true
+OC.__wildSkiesTick(ow, 0.05)
+
+-- REMATCHES ON: session memory only, the save stays clean
+run.loader.modOptions = run.loader.modOptions or {}
+run.loader.modOptions.wild_skies = { rematches = true }
+defeated = nil
+queued = {}
+local tr7 = freshTrainer(false)
+driveToStandoff(tr7)
+run.loader.events:emit("battle.started", {})
+run.loader.events:emit("battle.ended", { result = "win" })
+T.check(defeated ~= nil, "defeat reported under rematches too")
+T.eq(next(Game.save.flags), nil, "no save flag under REMATCHES")
+T.eq(dbg.donorAllowed(1, true), false,
+  "session memory retires the fighter for now")
+tr7.dead = true
+OC.__wildSkiesTick(ow, 0.05)
 
 run.release()
 T.finish("wild_skies_trainer_engage")

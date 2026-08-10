@@ -191,6 +191,37 @@ return function(mod)
   -- by battle.started / the trainer.party bench fallback); exactly one
   -- can be pending at a time because ow.engaging serializes engages
   local expectingSkyBattle = nil
+  -- and the one currently on the stack, held until battle.ended
+  local activeSkyBattle = nil
+
+  -- defeat memory per the REMATCHES setting: OFF remembers wins in
+  -- namespaced save flags (no rematch farming, survives saves), ON
+  -- keeps a session table so re-entering the map allows the donor
+  -- again.  A defeated donor never fields a fighter but may hail.
+  local sessionDefeats = {}
+  local function defeatFlagName(class, party)
+    return "WILD_SKIES_SKY_TRAINER_" .. tostring(class) .. "_"
+      .. tostring(party)
+  end
+  local function markDefeated(class, party)
+    if mod.options:get("rematches") then
+      sessionDefeats[class .. "_" .. party] = true
+      return
+    end
+    pcall(function()
+      mod.world:setFlag(defeatFlagName(class, party), true)
+    end)
+  end
+  local function donorDefeated(class, party)
+    if mod.options:get("rematches") then
+      return sessionDefeats[class .. "_" .. party] == true
+    end
+    local v = false
+    pcall(function()
+      v = mod.world:getFlag(defeatFlagName(class, party)) == true
+    end)
+    return v
+  end
   local battleRest = 0
   local lastBump = nil
   local summonFail -- forward: every summon ends in exactly one event
@@ -1084,6 +1115,9 @@ return function(mod)
     self.t = 0
     self.cellX = math.floor((self.px + 8) / 16)
     self.cellY = math.floor((self.py + 8) / 16)
+    -- a donor already beaten (per the active REMATCHES memory) never
+    -- fields another fighter, but its keeper may still cross and hail
+    if donorDefeated(donor.class, donor.party) then self.hailer = true end
     local riderSprite = donorRiderSprite(game, self.donor)
     if riderSprite then
       self.rider = TrainerRider.new(self, riderSprite)
@@ -1358,17 +1392,47 @@ return function(mod)
   end
 
   -- the queued battle took the stack: hand over cleanly and wait it
-  -- out on the spot (battle.ended decides what happens after, and the
-  -- outcome handling owns the record from here)
+  -- out on the spot (battle.ended decides what happens after)
   mod.events:on("battle.started", function()
     if not expectingSkyBattle then return end
     local rec = expectingSkyBattle
     expectingSkyBattle = nil
-    rec.live = true
+    activeSkyBattle = rec
     local tr = rec.trainer
     if tr and not tr.dead then
       local Game = require("src.core.Game")
       tr:disengage(Game and Game.overworld, "standby")
+    end
+  end)
+
+  -- the outcome: a win retires the donor's fighter role per REMATCHES
+  -- and demotes the beaten trainer to a hailer winding down its visit;
+  -- anything else (run, loss) just cools the trainer off
+  mod.events:on("battle.ended", function(ev)
+    local rec = activeSkyBattle
+    if not rec then return end
+    activeSkyBattle = nil
+    local tr = rec.trainer
+    if ev and ev.result == "win" then
+      markDefeated(rec.donor.class, rec.donor.party)
+      pcall(function()
+        mod.events:emit("mod.wild_skies.trainer_defeated", {
+          oppClass = rec.donor.class, partyIndex = rec.donor.party,
+          cellX = tr and tr.cellX, cellY = tr and tr.cellY,
+        })
+      end)
+      if tr and not tr.dead then
+        tr.hailer = true
+        tr.cooldownT = 60
+        tr.spotted = nil
+        tr.mode = "perch"
+        tr.perchAlt = tr.perchAlt or 0
+        tr.perchT = 4
+        -- the visit winds down soon after the loss
+        tr.visitFor = math.min(tr.visitFor or 30, tr.t + 10)
+      end
+    elseif tr and not tr.dead then
+      tr:disengage(nil, "commute")
     end
   end)
 
@@ -1385,6 +1449,12 @@ return function(mod)
     return tr
   end
   mod.exports.__skyTrainerDebug.list = function() return trainers end
+  mod.exports.__skyTrainerDebug.donorAllowed = function(i, asFighter)
+    local d = SKY_TRAINER_DONORS[i]
+    if not d then return false end
+    if not asFighter then return true end
+    return not donorDefeated(d.class, d.party)
+  end
 
   -- spawn one flyer on demand (scenario mods, tests): entry, height and
   -- behaviour roll as usual; the ambient caps and cooldowns are not
