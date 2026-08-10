@@ -229,6 +229,7 @@ end
 -- be amputated by a foreign snapshot restore, so it heals strictly
 -- better than the draw wrap it replaces.
 local composeHooked = false
+local inputHooked = false
 function Sky.ensureUpdateWrap(OC, tickKey, hooks)
   local keys = OC.__skyTickKeys or {}
   OC.__skyTickKeys = keys
@@ -283,6 +284,23 @@ function Sky.ensureUpdateWrap(OC, tickKey, hooks)
   -- earlier can't be unwound (its original draw is private to the
   -- closure), so mixed versions need the older mod updated too
   OC.__skyDrawWrapped = true
+
+  -- Some full visual stacks replace OC.update after composition has already
+  -- run. In that ordering the render watchdog heals one frame too early and
+  -- solo sky simulation remains detached, while network snapshots can still
+  -- make multiplayer look healthy. input.step is the engine's fixed update
+  -- seam immediately before the active state advances, so it is a safe
+  -- second watchdog; it restores the dispatcher but never ticks simulation.
+  if hooks and not inputHooked then
+    inputHooked = true
+    pcall(function()
+      hooks:wrap("input.step", function(nextFn, ...)
+        local ensure = OC.__skyEnsureUpdateWrap
+        if ensure then ensure() end
+        return nextFn(...)
+      end)
+    end)
+  end
 
   if hooks and not composeHooked then
     composeHooked = true

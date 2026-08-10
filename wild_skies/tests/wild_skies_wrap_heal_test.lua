@@ -36,6 +36,9 @@ package.loaded["src.world.OverworldController"] = OC
 local function compose()
   Runtime.call("render.compose", function() return false end)
 end
+local function inputStep()
+  Runtime.call("input.step", function() end, {}, 1 / 60)
+end
 package.loaded["src.world.Map"] = { isOutside = function() return true end }
 package.loaded["src.world.FieldDefaults"] = { field = function() return {} end }
 
@@ -131,6 +134,20 @@ T.eq(f, 1, "resurrected wrap: second tick runs once")
 
 T.eq(OC.draw, shippedDraw,
   "OC.draw still untouched after every clobber and heal")
+
+-- A full visual stack can replace the slot after the composed frame. The
+-- fixed input seam must restore it before the next overworld update even when
+-- no further compose call has happened.
+kRestore()
+T.check(OC.update ~= OC.__skyUpdateWrap,
+  "late clobber detaches the dispatcher after render")
+inputStep()
+T.eq(OC.update, OC.__skyUpdateWrap,
+  "input watchdog heals before the overworld update")
+v, t, f = frame()
+T.eq(v, 1, "input-healed: vanilla runs once")
+T.eq(t, 1, "input-healed: sky tick runs once")
+T.eq(f, 1, "input-healed: second tick runs once")
 
 run.release()
 T.finish("wild_skies_wrap_heal")
