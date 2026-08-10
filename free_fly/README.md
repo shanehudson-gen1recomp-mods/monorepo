@@ -125,6 +125,11 @@ overlapping features of their own, so check their changelogs):
   HM-compatible partner without teaching the move, because this mod asks
   the engine's own field-move eligibility chain instead of keeping rules
   of its own.
+- [Crystal 251](https://github.com/Deftones565/gen1recomp-mod-crystal-251)
+  (compatibility work against 0.10.1): no species list lives in this
+  mod, so its Johto birds mount, gate on their own FLY compatibility
+  and filter airborne encounters like any Kanto bird. Species without
+  borrowed art fly on the generic bird sheet.
 
 ## For mod authors
 
