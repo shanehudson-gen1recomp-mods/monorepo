@@ -268,6 +268,22 @@ the battler under the aim cursor while a target or switch prompt is
 up, `exports.focusBattler(battle)` the partner the HUD borrow is
 following mid-action; both are nil otherwise.
 
+On voxel forks that carry the full Stadium family (`Stadium`,
+`StadiumMon`, `StadiumPack` behind `lib.require`), the adapter goes one
+tier deeper: partner battlers stand as their own Stadium models beside
+the leads'. The wiring is by surface probe, not mod name, so a fork
+keeps it by keeping that surface: `Stadium.begin/update/draw/cast/
+active` (plus `finish`, `footprint` and `covers` where present) as
+plain functions on the module table, `StadiumMon.new/setSpecies/
+request/attack/matrix/build/worldRadius`, and `StadiumPack.keep`. The
+adapter also records partner actions as plain fields on the battle
+(`__dbStadiumAttack`, `__dbStadiumFaints`, `__dbStadiumEnter`,
+`__dbStadiumMorph`); a fork or tracker may read these but should not
+write them. A side whose partner has no pack falls back to the
+composed billboard cards, per side, and the lead's model is stood down
+for those frames by borrowing the trainer-showing flags around
+`Stadium.update`.
+
 ### Partner sources
 
 `registerPartnerSource({ id, priority, provide })` lets a mod supply

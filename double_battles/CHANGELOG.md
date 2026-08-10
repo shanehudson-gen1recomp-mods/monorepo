@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.0
+
+- STADIUM doubles: on the 3D model rungs the partner now stands as its
+  own Stadium model beside the lead's instead of dropping the side to
+  flat cards. Partner moves resolve to the species' own move animation,
+  send-outs play the entrance, faints wait for the HP bar and then hold
+  the collapse to its end, shadows are cast, and STADIUM B's discs
+  widen to fit the pair. Wired by probing the fork's public Stadium
+  surface (Stadium/StadiumMon/StadiumPack), never by mod name, so
+  Dramatic Shape and Dramaless both get it and the Battle Art fork
+  (which has no Stadium) keeps the composed cards.
+- Per-side fallback ladder: a partner with no Stadium pack, a
+  substitute, a transform, or a model that fails to build drops only
+  that side to the composed pair of cards; the other side keeps its
+  models. Fixed alongside: on the card tier the lead's model now
+  stands down for the frame (previously the model and the composed
+  cards could draw on the same cell).
+
 ## 0.6.0
 
 - TRAINER PAIRS: two unfought trainers standing side by side now fight
