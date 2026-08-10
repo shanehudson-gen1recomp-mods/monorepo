@@ -345,8 +345,8 @@ For symmetry, the other side of the fence:
 - Crystal 251 (`CRYSTAL_251`): mostly we consume nothing directly,
   and that's the design. Its species land in the engine's merged data
   (`data.pokemon` with types and tmhm, `data.encounters`, icons), the
-  same tables we already read, so Johto flyers, mounts and sky
-  trainer birds work with no id-keyed code. Two deliberate seams on
+  same tables we already read, so Johto flyers and mounts work with
+  no id-keyed code. Two deliberate seams on
   top: wild_skies probes any mod exporting a period-aware `ecology`
   (a table with `list()` returning rows of `{ mapId, terrain, period,
   group }`) to learn which species fly only at night, and
