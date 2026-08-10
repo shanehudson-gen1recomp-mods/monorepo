@@ -40,7 +40,9 @@ swoops to your side, and his own challenge line opens his own battle,
 with his payout and dialogue intact. About a third just want to chat,
 and beaten keepers wave instead of rematching (the REMATCHES option
 decides whether a defeat lasts the save or just the visit). Rare by
-design: one roll per map visit, never over towns, caves or the forest.
+design: one roll per map visit, never in caves or under the forest.
+Town, city and island air is a peace zone: keepers cross it and stop
+to chat, but nobody starts a fight over a rooftop cafe.
 Any keeper may cross any wild sky, badges or not, so an early wanderer
 can meet a keeper well above their weight; whether to answer the
 challenge is up to them.

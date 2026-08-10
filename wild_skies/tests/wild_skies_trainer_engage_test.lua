@@ -169,6 +169,25 @@ end
 T.eq(ow.engaging, false, "hailer releases the freeze at once")
 T.eq(tr4.mode, "leave", "and takes its leave")
 
+-- ------- peace zones: town air hails, never battles
+
+ow.map.id = "CELADON_CITY"
+engaged = nil
+queued = {}
+local trTown = freshTrainer(false)
+T.eq(trTown.hailer, false, "a fighter wandered in over the seam")
+driveToStandoff(trTown)
+T.check(engaged ~= nil, "still announces itself downtown")
+local townRows = queued[#queued]
+T.check(townRows ~= nil and #townRows >= 1, "chat queued in the city")
+for _, row in ipairs(townRows) do
+  T.check(row[1] ~= "start_battle", "no battles over a peace zone")
+end
+T.eq(ow.engaging, false, "the chat releases the freeze")
+trTown.dead = true
+OC.__wildSkiesTick(ow, 0.05)
+ow.map.id = "ROUTE_13"
+
 -- ------- outcomes and the REMATCHES setting
 
 local defeated

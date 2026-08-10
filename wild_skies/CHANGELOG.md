@@ -16,6 +16,9 @@
 - REMATCHES (option, default OFF): OFF remembers defeats in the save,
   so a beaten sky trainer never rematches; ON keeps the memory for
   the session only.
+- Town, city, island and plateau air is a peace zone: keepers cross
+  it and chat (the donor's own line), but never start a battle there;
+  caves and the forest canopy stay keeper-free.
 - TRAINER DENSITY (option, default MED): LOW and MED keep keepers a
   rare punctuation (one roll per map visit); HIGH and ULTRA turn the
   sky bird-busy, spawning keepers continuously up to the ambient bird

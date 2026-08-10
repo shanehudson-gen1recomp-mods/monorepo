@@ -1031,6 +1031,26 @@ return function(mod)
   local SkyTrainer = {}
   SkyTrainer.__index = SkyTrainer
 
+  -- town, city, island and plateau air is a peace zone: keepers may
+  -- cross it and chat, but nobody starts a fight over a rooftop cafe
+  local function peacefulAir(ow)
+    local def = ow and ow.map and ow.map.def
+    if not def then return false end
+    local ok, outside = pcall(function()
+      local MapDef = require("src.world.Map")
+      local FieldDefaults = require("src.world.FieldDefaults")
+      local Game = require("src.core.Game")
+      return MapDef.isOutside(def,
+        FieldDefaults.field(Game.data, "outsideTilesets"))
+    end)
+    if not ok or not outside then return false end
+    local id = ow.map.id or ""
+    return id:find("_TOWN", 1, true) ~= nil
+      or id:find("_CITY", 1, true) ~= nil
+      or id:find("_ISLAND", 1, true) ~= nil
+      or id:find("_PLATEAU", 1, true) ~= nil
+  end
+
   local function trainerLift(self)
     if self.mode == "perch" then
       if (self.perchAlt or 0) > 0 and voxelOn() then return self.perchAlt end
@@ -1273,7 +1293,7 @@ return function(mod)
         cellX = self.cellX, cellY = self.cellY,
       })
     end)
-    if self.hailer then
+    if self.hailer or peacefulAir(ow) then
       -- a hail is its whole payoff: the donor's after-battle chat
       -- line, then off; the script runner freezes input on its own
       if h and h.after then
@@ -1641,17 +1661,14 @@ return function(mod)
       local forest = def and def.tileset == "FOREST"
       local outside = def and (forest or MapDef.isOutside(def,
         FieldDefaults.field(Game.data, "outsideTilesets"))) or false
-      local id = ow.map.id
-      local town = outside and (id:find("_TOWN", 1, true) ~= nil
-        or id:find("_CITY", 1, true) ~= nil
-        or id:find("_ISLAND", 1, true) ~= nil
-        or id:find("_PLATEAU", 1, true) ~= nil) or false
-      if not outside or forest or town then return end
+      if not outside or forest then return end
       visitRolled = true
       if love.math.random() >= cfg.chance then return end
       local tr = SkyTrainer.new(Game, ow,
         love.math.random(#SKY_TRAINER_DONORS))
       if tr then
+        -- keepers over a peace zone only ever chat
+        if peacefulAir(ow) then tr.hailer = true end
         trainers[#trainers + 1] = tr
         table.insert(ow.entities, tr)
         if tr.rider then table.insert(ow.entities, tr.rider) end
