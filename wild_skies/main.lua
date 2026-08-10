@@ -111,6 +111,69 @@ return function(mod)
   local ULTRA_SET = {}
   for _, u in ipairs(ULTRA_RARES) do ULTRA_SET[u.species] = true end
 
+  -- sky trainer donors: real map trainers whose party, payout, AI and
+  -- dialogue are borrowed wholesale.  donor = the trainer_headers key
+  -- (map label + object index) their battle/won/after text reads from;
+  -- badges = the badge-count window the donor may spawn in.  All 15
+  -- map-placed Bird Keepers carry full headers; these ten span the
+  -- level curve L25-34 with species variety.
+  local SKY_TRAINER_DONORS = {
+    { class = "OPP_BIRD_KEEPER", party = 2,
+      donor = { map = "Route13", index = 6 },  badges = { 3, 5 } },
+    { class = "OPP_BIRD_KEEPER", party = 6,
+      donor = { map = "Route15", index = 3 },  badges = { 3, 5 } },
+    { class = "OPP_BIRD_KEEPER", party = 15,
+      donor = { map = "Route14", index = 2 },  badges = { 3, 5 } },
+    { class = "OPP_BIRD_KEEPER", party = 17,
+      donor = { map = "Route14", index = 4 },  badges = { 4, 6 } },
+    { class = "OPP_BIRD_KEEPER", party = 7,
+      donor = { map = "Route15", index = 4 },  badges = { 4, 6 } },
+    { class = "OPP_BIRD_KEEPER", party = 1,
+      donor = { map = "Route13", index = 1 },  badges = { 4, 6 } },
+    { class = "OPP_BIRD_KEEPER", party = 8,
+      donor = { map = "Route18", index = 1 },  badges = { 4, 6 } },
+    { class = "OPP_BIRD_KEEPER", party = 11,
+      donor = { map = "Route20", index = 7 },  badges = { 5, 7 } },
+    { class = "OPP_BIRD_KEEPER", party = 4,
+      donor = { map = "Route14", index = 5 },  badges = { 5, 8 } },
+    { class = "OPP_BIRD_KEEPER", party = 9,
+      donor = { map = "Route18", index = 2 },  badges = { 5, 8 } },
+  }
+
+  -- HM02 compatibility off the species' own machine list, the same
+  -- bar free_fly's teach path uses
+  local function speciesCanFly(data, species)
+    local def = data.pokemon and data.pokemon[species]
+    for _, m in ipairs((def and def.tmhm) or {}) do
+      if m == "FLY" then return true end
+    end
+    return false
+  end
+
+  -- the donor rides its strongest FLY-capable roster mon; a roster
+  -- with none gets a Pidgeot with FLY at the roster average, clamped
+  -- inside the roster's own level band so it reads believable
+  local function donorMount(game, class, party)
+    local cls = game.data.trainers and game.data.trainers[class]
+    local roster = cls and cls.parties and cls.parties[party]
+    if not roster or #roster == 0 then return nil end
+    local best
+    local sum, lo, hi = 0, math.huge, 0
+    for _, m in ipairs(roster) do
+      sum = sum + m.level
+      lo, hi = math.min(lo, m.level), math.max(hi, m.level)
+      if speciesCanFly(game.data, m.species)
+         and (not best or m.level > best.level) then
+        best = { species = m.species, level = m.level }
+      end
+    end
+    if best then return best end
+    local avg = math.floor(sum / #roster + 0.5)
+    return { species = "PIDGEOT",
+             level = math.max(lo, math.min(hi, avg)),
+             fallback = true }
+  end
+
   local flyers = {}
   local battleRest = 0
   local lastBump = nil
@@ -162,6 +225,13 @@ return function(mod)
       end
     end
   end
+
+  -- internal test seam (undocumented = internal per INTEGRATION.md);
+  -- grows spawn/list handles as the trainer tasks land
+  mod.exports.__skyTrainerDebug = {
+    donors = SKY_TRAINER_DONORS,
+    donorMount = donorMount,
+  }
 
   mod.exports.flyerAt = function(cellX, cellY, radius)
     local f = flyerNear(cellX, cellY, radius)
