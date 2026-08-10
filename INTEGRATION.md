@@ -161,6 +161,27 @@ flyer, whoever the caller was, with the same payload shape. Listen to
 this rather than to each consumer's own events if you want to track
 every bird that leaves the sky through the API.
 
+### Sky trainers
+
+With the SKY TRAINERS option on (it ships off), vanilla Bird Keepers
+occasionally cross wild routes and can start their own trainer battles
+or a chat. They are lightweight entities like the flyers (never in
+`ow.npcs`, invisible to `flyerAt`/`takeFlyer` and friends), and they
+read the player's flight state through the shared `isFlying()` /
+`altitude()` exports contract, so any flight mod that speaks it is
+seen at altitude automatically. Three events narrate the sequence,
+each with payload `{ oppClass, partyIndex, cellX, cellY }`:
+
+- `mod.wild_skies.trainer_spotted`: the sight cone found the player.
+- `mod.wild_skies.trainer_engaged`: the swoop arrived; the challenge
+  or hail is about to queue.
+- `mod.wild_skies.trainer_defeated`: the player won the battle.
+
+Sky trainer battles reach the engine through the ordinary
+`start_battle trainer` script row, so they pass the same push seam as
+any trainer battle (double_battles' TRAINER 2V2 option decorates them
+naturally).
+
 ## double_battles
 
 ### Starting doubles

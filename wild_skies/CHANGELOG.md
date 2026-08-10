@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.7.0
+
+- SKY TRAINERS (option, default OFF): the game's own Bird Keepers
+  cross the wild routes on their strongest FLY-capable roster bird
+  (a keeper without one borrows a Pidgeot that also fights on his
+  bench). They commute with hover pauses, perch on roofs, and can
+  spot you: airborne within one altitude band on whichever flight
+  system you ride (the shared isFlying/altitude exports, so free_fly
+  and Dramatic Sky Ride both count), or on foot when the keeper is
+  perched or low. The classic sting and "!" lead into the donor's own
+  challenge line, battle, payout and dialogue. About a third are
+  hailers who only chat, and beaten keepers demote to hailers.
+- REMATCHES (option, default OFF): OFF remembers defeats in the save,
+  so a beaten sky trainer never rematches; ON keeps the memory for
+  the session only.
+- Map edges are not cliffs any more: birds (and sky trainers) crossing
+  a seam keep flying over the rendered neighbor strip and only despawn
+  off-camera, instead of vanishing in plain sight at the boundary.
+- New events for mod authors: mod.wild_skies.trainer_spotted,
+  trainer_engaged and trainer_defeated, payload
+  { oppClass, partyIndex, cellX, cellY }.
+
 ## 1.6.3
 
 - The GROUND BUMPS option is now called GROUND BATTLES. Same toggle,

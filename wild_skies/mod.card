@@ -6,6 +6,7 @@ return {
     changed = {},
     added = {
       "FLYING species from the map's grass slots fly across with a shadow",
+      "SKY TRAINERS (off by default): vanilla Bird Keepers ride their own rosters across wild routes and can challenge or hail you",
     },
     known = {
       "icon-only classes (bug/plant/quadruped/snake) ride the bird look",

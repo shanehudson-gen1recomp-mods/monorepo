@@ -28,15 +28,32 @@ flies alone, is always bold, and never appears over towns, in caves or
 under the forest canopy, so when you do see one it can actually be
 fought and caught.
 
+With SKY TRAINERS on (it ships off), the sky occasionally holds a
+person too: one of the game's own Bird Keepers, riding the strongest
+FLY-capable bird from his real roster (the rare keeper without one
+borrows a Pidgeot, and it fights on his bench too). They cross the
+wild routes with purpose, hover to scan ahead, sometimes rest on a
+roof, and they can spot you: in the air within their altitude band
+(whichever flight mod carries you), or on the ground when they perch
+or fly low. A sighting plays the classic sting and "!", the keeper
+swoops to your side, and his own challenge line opens his own battle,
+with his payout and dialogue intact. About a third just want to chat,
+and beaten keepers wave instead of rematching (the REMATCHES option
+decides whether a defeat lasts the save or just the visit). Rare by
+design: one roll per map visit, badge-appropriate rosters, never over
+towns, caves or the forest.
+
 ![Demo](https://raw.githubusercontent.com/shanehudson-gen1recomp-mods/monorepo/main/.github/wild_skies-demo.gif)
 
 ## Options
 
 | Option | Default | What it does |
 |---|---|---|
-| SKY DENSITY | MED | LOW / MED / HIGH flyer caps and spawn cooldowns |
+| SKY DENSITY | MED | LOW / MED / HIGH flyer caps and spawn cooldowns (also paces sky trainers) |
 | BIRD SIZE | NORMAL | SMALL / NORMAL / LARGE / HUGE draw scale on top of dex height |
 | GROUND BATTLES | ON | low birds (perched, landing, flushed) can battle a walking player |
+| SKY TRAINERS | OFF | Bird Keepers cross the wild routes on their birds and can challenge you |
+| REMATCHES | OFF | OFF: a beaten sky trainer stays beaten for the save; ON: they may return on a later visit |
 
 ## Works well with
 
