@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.4
+
+- Fixed the "walking as a Charmander" bug: a session torn down
+  mid-flight (a hot reload, or the mod manager updating this mod while
+  you were airborne) could leave the mount's sheet on the player with
+  no stashed walking sprite, and the next takeoff then stashed the
+  mount itself as your "walking sheet", so every landing restored the
+  wrong figure, typically the generic monster walker. Air sheets are
+  tagged now: they are never stashed as a walking sprite, and any
+  lingering one heals within a tick by rebuilding the real player
+  sheet from the game data. No restart needed, existing sessions
+  self-repair on update.
+
 ## 1.5.3
 
 - The sea-crossing confirm is now Pallet Town's send-off. Flying south
