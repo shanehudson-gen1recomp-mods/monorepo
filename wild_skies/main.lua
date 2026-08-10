@@ -31,6 +31,10 @@ return function(mod)
       choices = { { "SMALL", "small" }, { "NORMAL", "normal" },
                   { "LARGE", "large" }, { "HUGE", "huge" } } },
     { key = "bumps", label = "GROUND BATTLES", type = "toggle", default = true },
+    { key = "trainers", label = "SKY TRAINERS", type = "toggle",
+      default = false },
+    { key = "rematches", label = "REMATCHES", type = "toggle",
+      default = false },
   })
 
   -- a bird at or below this height can collide with a walking player;
@@ -41,6 +45,13 @@ return function(mod)
     low  = { cap = 3, cooldown = 8 },
     med  = { cap = 6, cooldown = 4 },
     high = { cap = 10, cooldown = 2.5 },
+  }
+  -- sky trainers punctuate rather than decorate: one roll per map
+  -- visit, minutes of cooldown, and only HIGH ever fields two at once
+  local TRAINER_DENSITY = {
+    low  = { chance = 0.20, cooldown = 240, cap = 1 },
+    med  = { chance = 0.35, cooldown = 180, cap = 1 },
+    high = { chance = 0.50, cooldown = 120, cap = 2 },
   }
   local function density()
     return DENSITY[mod.options:get("density")] or DENSITY.med
@@ -175,6 +186,7 @@ return function(mod)
   end
 
   local flyers = {}
+  local trainers = {}
   local battleRest = 0
   local lastBump = nil
   local summonFail -- forward: every summon ends in exactly one event
@@ -688,7 +700,7 @@ return function(mod)
         or py < cam.y - margin or py > cam.y + vh + margin
   end
 
-  function Flyer:edgeCheck(ow, dt)
+  local function airEdgeCheck(self, ow, dt)
     if ow.map:inBounds(self.cellX, self.cellY) then
       self.oobT = nil
       return
@@ -806,7 +818,7 @@ return function(mod)
         self.alt = math.min(self.altTarget, self.alt + CLIMB * dt)
         self.cellX = math.floor((self.px + 8) / 16)
         self.cellY = math.floor((self.py + 8) / 16)
-        self:edgeCheck(ow, dt)
+        airEdgeCheck(self, ow, dt)
         return
       end
       -- wander: capped-turn jitter, then the flock pull and the leash
@@ -860,7 +872,7 @@ return function(mod)
 
     self.cellX = math.floor((self.px + 8) / 16)
     self.cellY = math.floor((self.py + 8) / 16)
-    self:edgeCheck(ow, dt)
+    airEdgeCheck(self, ow, dt)
   end
 
   -- the voxel pipeline live?  a rooftop percher then carries its roof
@@ -931,6 +943,187 @@ return function(mod)
            flapPhase(self), false, false
   end
 
+  -- ------- sky trainers: donor vanilla trainers riding their birds.
+  -- Same lightweight-entity idea as Flyer (passable, own tick/pose,
+  -- never in ow.npcs) but purposeful movement: a commute across the
+  -- route with hover pauses, the odd perch, then out.  No boids, no
+  -- camera leash, no flushing.
+  local SkyTrainer = {}
+  SkyTrainer.__index = SkyTrainer
+
+  function SkyTrainer.new(game, ow, donorIndex)
+    local donor = SKY_TRAINER_DONORS[donorIndex]
+    if not donor then return nil end
+    local mount = donorMount(game, donor.class, donor.party)
+    if not mount then return nil end
+    local sprite = Sky.mountSprite(game.data, mount.species, "wild_skies")
+    if not sprite then return nil end
+    serial = serial + 1
+    local self = setmetatable({}, SkyTrainer)
+    self.id = "wild_skies_trainer_" .. serial
+    self.skyTrainer = true
+    self.donor = { class = donor.class, party = donor.party,
+                   map = donor.donor.map, index = donor.donor.index,
+                   key = donor.class .. "_" .. donor.party }
+    self.mount = mount
+    self.sprite = sprite
+    self.scale = Sky.dexScale(game.data, mount.species)
+    self.passable = true
+    self.hailer = love.math.random() < 0.35
+    self.speed = 30
+    self.flap = 6 / math.max(1, self.scale)
+
+    local map, cam = ow.map, ow.camera
+    local vw, vh = game.renderer:worldViewSize()
+    self.mapW = ((map.widthCells or (map.width or 10) * 2)) * 16
+    self.mapH = ((map.heightCells or (map.height or 9) * 2)) * 16
+    -- in from one side of the view, straight across; the view-based
+    -- edge rule (not map bounds) decides when the visit truly ends
+    local dir = love.math.random() < 0.5 and 1 or -1
+    self.px = dir == 1 and (cam.x - 40) or (cam.x + vw + 40)
+    self.py = cam.y + love.math.random(16, math.max(17, vh - 32))
+    self.heading = dir == 1 and 0 or math.pi
+    self.facing = dir == 1 and "right" or "left"
+    self.alt = love.math.random(SKY_BAND[1], SKY_BAND[2])
+    self.mode = "commute"
+    self.hoverIn = 3 + love.math.random() * 3
+    self.visitFor = 25 + love.math.random() * 15
+    self.t = 0
+    self.cellX = math.floor((self.px + 8) / 16)
+    self.cellY = math.floor((self.py + 8) / 16)
+    return self
+  end
+
+  local function trainerStep(self, dt, ease)
+    self.px = self.px + math.cos(self.heading) * self.speed * (ease or 1) * dt
+    self.py = self.py + math.sin(self.heading) * self.speed * (ease or 1) * dt
+    local vx = math.cos(self.heading)
+    self.facing = math.abs(vx) >= math.abs(math.sin(self.heading))
+      and (vx < 0 and "left" or "right")
+      or (math.sin(self.heading) < 0 and "up" or "down")
+  end
+
+  function SkyTrainer:tick(ow, dt)
+    self.t = self.t + dt
+    if self.mode == "commute" then
+      if (self.hoverT or 0) > 0 then
+        -- the hover is the scan moment (sight lands in a later task)
+        self.hoverT = self.hoverT - dt
+      else
+        self.hoverIn = (self.hoverIn or 4) - dt
+        if self.hoverIn <= 0 then
+          self.hoverT = 1.5
+          self.hoverIn = 4 + love.math.random() * 4
+        end
+        trainerStep(self, dt, 1)
+        -- the occasional rest stop, same perch logic as the birds
+        if self.t > 6 and love.math.random() < dt / 20 then
+          local Game = require("src.core.Game")
+          local lx, ly, lAlt = findPerchCell(ow, Game)
+          if lx then
+            self.mode = "toPerch"
+            self.landX, self.landY = lx * 16, ly * 16
+            self.perchAlt = lAlt or 0
+          end
+        end
+      end
+      if self.t >= self.visitFor then self.mode = "leave" end
+    elseif self.mode == "toPerch" then
+      local dx, dy = self.landX - self.px, self.landY - self.py
+      local dist = math.abs(dx) + math.abs(dy)
+      if dist > 5 then
+        turnToward(self, math.atan2(dy, dx), TURN_MAX * 1.5 * dt)
+        trainerStep(self, dt, math.min(1, dist / 40 + 0.35))
+        local approach = (self.perchAlt or 0) + math.min(16, dist * 0.4)
+        if self.alt > approach then
+          self.alt = math.max(approach, self.alt - CLIMB * dt)
+        end
+      else
+        self.px, self.py = self.landX, self.landY
+        self.alt = self.alt - CLIMB * dt
+        if self.alt <= (self.perchAlt or 0) then
+          self.alt = self.perchAlt or 0
+          self.mode = "perch"
+          self.perchT = (self.perchAlt or 0) > 0
+            and love.math.random(8, 14) or love.math.random(5, 9)
+        end
+      end
+    elseif self.mode == "perch" then
+      self.perchT = (self.perchT or 6) - dt
+      if self.perchT <= 0 then
+        self.mode = "rise"
+        self.altTarget = love.math.random(SKY_BAND[1], SKY_BAND[2])
+      end
+    elseif self.mode == "rise" then
+      self.alt = math.min(self.altTarget or SKY_BAND[1],
+                          self.alt + CLIMB * dt)
+      trainerStep(self, dt, 0.5)
+      if self.alt >= (self.altTarget or SKY_BAND[1]) then
+        self.mode = "commute"
+      end
+    else -- leave
+      trainerStep(self, dt, 1.2)
+      if self.t > (self.visitFor or 30) + 20 then self.dead = true end
+    end
+    self.cellX = math.floor((self.px + 8) / 16)
+    self.cellY = math.floor((self.py + 8) / 16)
+    airEdgeCheck(self, ow, dt)
+  end
+
+  local function trainerLift(self)
+    if self.mode == "perch" then
+      if (self.perchAlt or 0) > 0 and voxelOn() then return self.perchAlt end
+      return 0
+    end
+    return self.alt + math.sin(self.t * 3) * 1.5
+  end
+
+  local function trainerFlap(self)
+    if self.mode == "perch" then return 0 end
+    return math.floor(self.t * self.flap) % 2
+  end
+
+  function SkyTrainer:draw(camX, camY)
+    local s = (self.scale or 1) * sizeMult()
+    local lift = trainerLift(self)
+    local fade = math.max(0.35, 1 - lift / 90)
+    local size = math.max(0.6, 1 - lift / 140)
+    love.graphics.setColor(0, 0, 0, 0.3 * fade)
+    love.graphics.ellipse("fill", self.px + 8 - camX, self.py + 14 - camY,
+                          5 * s * size, 2 * s * size)
+    love.graphics.setColor(1, 1, 1, 1)
+    local sy = math.floor(self.py - lift + 0.5)
+    if s ~= 1 then
+      local fx = math.floor(self.px + 8 - camX)
+      local fy = math.floor(sy + 12 - camY)
+      love.graphics.push()
+      love.graphics.translate(fx, fy)
+      love.graphics.scale(s, s)
+      love.graphics.translate(-fx, -fy)
+    end
+    self.sprite:draw(math.floor(self.px + 0.5), sy, camX, camY,
+                     self.facing, trainerFlap(self), false)
+    if s ~= 1 then love.graphics.pop() end
+  end
+
+  function SkyTrainer:pose()
+    return self.sprite, self.px, self.py - trainerLift(self),
+           self.facing, trainerFlap(self), false, false
+  end
+
+  -- test/scenario seam: spawn ignores the option and the roll gates
+  mod.exports.__skyTrainerDebug.spawn = function(donorIndex)
+    local Game = require("src.core.Game")
+    local ow = Game and Game.overworld
+    if not (ow and ow.map and ow.player) then return nil end
+    local tr = SkyTrainer.new(Game, ow, donorIndex or 1)
+    if not tr then return nil end
+    trainers[#trainers + 1] = tr
+    table.insert(ow.entities, tr)
+    return tr
+  end
+  mod.exports.__skyTrainerDebug.list = function() return trainers end
+
   -- spawn one flyer on demand (scenario mods, tests): entry, height and
   -- behaviour roll as usual; the ambient caps and cooldowns are not
   -- consulted.  Returns the flyer id, or nil and a reason.
@@ -979,10 +1172,72 @@ return function(mod)
 
     local bumpCooldown = 0
 
+    -- one trainer roll per map visit, gated on the option, the map
+    -- (wild outdoor air only) and the badge-fit donor pool; live
+    -- trainers tick regardless so toggling OFF can fly them out
+    local trainerCooldown = 0
+    local visitRolled = false
+    local lastTrainerMap = nil
+
+    local function trainersTick(ow, dt)
+      for i = #trainers, 1, -1 do
+        local tr = trainers[i]
+        tr:tick(ow, dt)
+        if tr.dead then
+          detach(ow, tr)
+          table.remove(trainers, i)
+        end
+      end
+      if not mod.options:get("trainers") then return end
+      if ow.map.id ~= lastTrainerMap then
+        lastTrainerMap = ow.map.id
+        visitRolled = false
+      end
+      trainerCooldown = math.max(0, trainerCooldown - dt)
+      local cfg = TRAINER_DENSITY[mod.options:get("density")]
+        or TRAINER_DENSITY.med
+      if visitRolled or trainerCooldown > 0 or #trainers >= cfg.cap then
+        return
+      end
+      local def = ow.map.def
+      local forest = def and def.tileset == "FOREST"
+      local outside = def and (forest or MapDef.isOutside(def,
+        FieldDefaults.field(Game.data, "outsideTilesets"))) or false
+      local id = ow.map.id
+      local town = outside and (id:find("_TOWN", 1, true) ~= nil
+        or id:find("_CITY", 1, true) ~= nil
+        or id:find("_ISLAND", 1, true) ~= nil
+        or id:find("_PLATEAU", 1, true) ~= nil) or false
+      if not outside or forest or town then return end
+      visitRolled = true
+      if love.math.random() >= cfg.chance then return end
+      local badges = 0
+      pcall(function()
+        local Badges = require("src.inventory.Badges")
+        badges = Badges.count(Game.data, Game.save) or 0
+      end)
+      local pool = {}
+      for i, d in ipairs(SKY_TRAINER_DONORS) do
+        if badges >= d.badges[1] and badges <= d.badges[2] then
+          pool[#pool + 1] = i
+        end
+      end
+      if #pool == 0 then return end
+      local tr = SkyTrainer.new(Game, ow, pool[love.math.random(#pool)])
+      if tr then
+        trainers[#trainers + 1] = tr
+        table.insert(ow.entities, tr)
+        trainerCooldown = cfg.cooldown
+        mod.log:info("a bird keeper is crossing %s on a %s (L%d)",
+          id, tostring(tr.mount.species), tr.mount.level or 0)
+      end
+    end
+
     local function skyTick(ow, dt)
       if not (ow and ow.map and ow.player) then return end
       dt = dt or 1 / 60
       battleRest = math.max(0, battleRest - dt)
+      trainersTick(ow, dt)
       for i = #flyers, 1, -1 do
         local f = flyers[i]
         f:tick(ow, dt)
