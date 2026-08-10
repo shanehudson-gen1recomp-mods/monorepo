@@ -20,6 +20,25 @@ return function(mod)
       .. "in the gen1recomp-mods repo to sync shared code; mod disabled")
     return
   end
+  local followerLandingSrc = mod:read("lib/FollowerLanding.lua")
+  if not followerLandingSrc then
+    mod.log:error("lib/FollowerLanding.lua is missing; reinstall the mod")
+    return
+  end
+  local followerLandingChunk, followerLandingErr = (loadstring or load)(
+    followerLandingSrc, "@free_fly/lib/FollowerLanding.lua")
+  if not followerLandingChunk then
+    mod.log:error("could not load follower landing support: %s; reinstall the mod",
+      tostring(followerLandingErr))
+    return
+  end
+  local followerLandingOk, FollowerLanding = pcall(followerLandingChunk)
+  if not followerLandingOk or type(FollowerLanding) ~= "table"
+      or type(FollowerLanding.rebuild) ~= "function" then
+    mod.log:error("could not initialize follower landing support: %s; reinstall the mod",
+      tostring(FollowerLanding))
+    return
+  end
 
   local RISE_SPEED = 72       -- px/s takeoff and landing lerp
 
@@ -120,6 +139,17 @@ return function(mod)
         water = (p and p.surfing == true) or nil,
       })
     end)
+  end
+
+  local function rebuildConvoyAfterLanding(game, ow, restoreEligibility)
+    local ok, attempted, err = FollowerLanding.rebuild(
+      mod, game, ow, restoreEligibility)
+    if not ok then
+      mod.log:warn("could not rebuild the follower convoy after landing: "
+        .. tostring(err))
+    elseif attempted then
+      mod.log:info("rebuilt the follower convoy after landing")
+    end
   end
 
   -- render pipelines (voxel, tilt) billboard every entity through pose();
@@ -1381,6 +1411,9 @@ return function(mod)
             if p.freeFlyWalkSprite then
               p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
             end
+            rebuildConvoyAfterLanding(Game, ow, function()
+              syncWildsFollowers(false)
+            end)
             emitLanded("landed", p)
             return
           end
