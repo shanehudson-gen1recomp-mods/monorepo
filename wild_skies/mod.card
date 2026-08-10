@@ -6,6 +6,7 @@ return {
     changed = {},
     added = {
       "FLYING species from the map's grass slots fly across with a shadow",
+      "ambient skies derive from the world's encounter tables, so dataset overhauls (Crystal 251) fill the air with their own species automatically",
     },
     known = {
       "icon-only classes (bug/plant/quadruped/snake) ride the bird look",

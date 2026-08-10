@@ -58,6 +58,12 @@ overlapping features of their own, so check their changelogs):
   wild double, and a sky bird that survives an undecided fight (you
   ran, or caught the other one) returns visibly to the air. Legendary
   sightings always stay 1v1, so a partner can never spoil the catch.
+- [Crystal 251](https://github.com/Deftones565/gen1recomp-mod-crystal-251)
+  (compatibility work against 0.10.1): the sky reads whatever the
+  dataset hosts, so its Johto flyers cross the routes it places them
+  on, Hoothoot and friends keep to the night per its own ecology,
+  and Mantine patrols the ambient sea air. Lugia and Ho-Oh
+  never roll in the sky; Crystal stages them at its sanctuaries.
 
 For a full mount system (controllable flying, ground and surf mounts),
 see [Dramatic Sky Ride](https://github.com/mfrtechconsult/dramatic-sky-ride).
