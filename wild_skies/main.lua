@@ -1206,9 +1206,15 @@ return function(mod)
     end)
     local me = self
     self.mode = "await"
-    ow.emote = { npc = self, frames = 60, onDone = function()
-      me.mode = "swoop"
-    end }
+    -- the engine draws the bubble at npc.py - 14, ground height; the
+    -- trainer renders at altitude, so a proxy lifts the "!" to where
+    -- the keeper actually is (it holds still under the bubble)
+    ow.emote = {
+      npc = { px = self.px, py = self.py - trainerLift(self),
+              host = self, skyTrainer = true },
+      frames = 60,
+      onDone = function() me.mode = "swoop" end,
+    }
   end
 
   -- every path out of an engage runs through here, so ow.engaging can
@@ -1504,7 +1510,10 @@ return function(mod)
     local Game = require("src.core.Game")
     local ow = Game and Game.overworld
     for _, tr in ipairs(trainers) do
-      if ow and ow.emote and ow.emote.npc == tr then ow.emote = nil end
+      if ow and ow.emote and (ow.emote.npc == tr
+         or ow.emote.npc.host == tr) then
+        ow.emote = nil
+      end
       if tr.mode == "await" or tr.mode == "swoop"
          or tr.mode == "standoff" or tr.mode == "standby" then
         if expectingSkyBattle and expectingSkyBattle.trainer == tr then

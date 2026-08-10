@@ -59,6 +59,17 @@ p.sprite = normal
 OC.__freeFlyTick(ow, 1 / 60)
 T.eq(p.sprite, normal, "a normal walking sprite is untouched")
 
+-- a PRE-FIX poisoned stash (no tag, but seeded like our renderers)
+-- must not be restored; the real sheet is rebuilt instead
+local legacyPoison = { seed = "free_fly_SPRITE_MONSTER" }
+p.sprite = { seed = "free_fly_mount" }
+p.freeFlyWalkSprite = legacyPoison
+OC.__freeFlyTick(ow, 1 / 60)
+T.check(p.sprite ~= legacyPoison and p.freeFlyWalkSprite ~= legacyPoison,
+  "a legacy poisoned stash is discarded, not restored")
+T.check(p.sprite and p.sprite.seed == "player",
+  "the rebuilt sheet is the engine's own player sprite")
+
 -- the poisoned state: a stale AIR sheet on the player, no stash
 -- (exactly what a mid-flight reload leaves behind)
 local stale = { __freeFlyAirSheet = true }

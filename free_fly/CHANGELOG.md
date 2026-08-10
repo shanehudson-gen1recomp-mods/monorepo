@@ -10,8 +10,10 @@
   wrong figure, typically the generic monster walker. Air sheets are
   tagged now: they are never stashed as a walking sprite, and any
   lingering one heals within a tick by rebuilding the real player
-  sheet from the game data. No restart needed, existing sessions
-  self-repair on update.
+  sheet from the game data. Sessions poisoned by an OLDER version heal
+  too: air sheets are also recognized by their renderer seed, so the
+  fix repairs the damage retroactively on the next hot reload, no
+  restart needed.
 
 ## 1.5.3
 

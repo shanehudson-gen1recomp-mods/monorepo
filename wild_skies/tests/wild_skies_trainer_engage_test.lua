@@ -88,7 +88,10 @@ local function driveToStandoff(tr)
   end
   T.check(tr.spotted, "player spotted")
   T.eq(ow.engaging, true, "overworld frozen for the challenge")
-  T.check(ow.emote ~= nil and ow.emote.npc == tr, "the ! bubble is ours")
+  T.check(ow.emote ~= nil and ow.emote.npc.host == tr,
+    "the ! bubble is ours")
+  T.check(ow.emote.npc.py <= tr.py - 20,
+    "and rides at the trainer's drawn height")
   T.eq(tr.mode, "await", "holding under the bubble")
   local done = ow.emote.onDone
   ow.emote = nil

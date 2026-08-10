@@ -1236,9 +1236,18 @@ return function(mod)
       end
       if not flying() then
         if p.freeFlyAlt then p.freeFlyAlt, p.freeFlying = nil, nil end
+        local isAir = Player.__freeFlyIsAirSheet
         if p.freeFlyWalkSprite then
-          p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
-        elseif p.sprite and p.sprite.__freeFlyAirSheet then
+          -- a stash poisoned by a pre-fix session is itself an air
+          -- sheet; restoring it would re-break the player
+          if isAir and isAir(p.freeFlyWalkSprite) then
+            p.freeFlyWalkSprite = Player.__freeFlyWalkRebuild
+              and Player.__freeFlyWalkRebuild() or nil
+          end
+          if p.freeFlyWalkSprite then
+            p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
+          end
+        elseif p.sprite and isAir and isAir(p.sprite) then
           -- a lost session left the mount on the player and took the
           -- stash with it; rebuild the real walking sheet
           local walk = Player.__freeFlyWalkRebuild
@@ -1308,8 +1317,9 @@ return function(mod)
           -- never stash one of our own air sheets (a stale mount from
           -- a lost session): landing would restore the wrong figure
           -- forever after.  Rebuild the real walking sheet instead.
+          local isAir = Player.__freeFlyIsAirSheet
           p.freeFlyWalkSprite = (p.sprite
-              and not p.sprite.__freeFlyAirSheet) and p.sprite
+              and not (isAir and isAir(p.sprite))) and p.sprite
             or (Player.__freeFlyWalkRebuild
                 and Player.__freeFlyWalkRebuild()) or nil
         end
@@ -1392,9 +1402,12 @@ return function(mod)
               mod.log:info("landed")
             end
             p.freeFlying, p.freeFlyAlt, p.freeFlyCanLand = nil, nil, nil
-            if p.freeFlyWalkSprite then
+            local isAirL = Player.__freeFlyIsAirSheet
+            if p.freeFlyWalkSprite
+               and not (isAirL and isAirL(p.freeFlyWalkSprite)) then
               p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
-            elseif p.sprite and p.sprite.__freeFlyAirSheet then
+            elseif p.sprite and isAirL and isAirL(p.sprite) then
+              p.freeFlyWalkSprite = nil
               local walk = Player.__freeFlyWalkRebuild
                 and Player.__freeFlyWalkRebuild()
               if walk then p.sprite = walk end
@@ -1893,6 +1906,20 @@ return function(mod)
       Player.__freeFlyBird = SpriteRenderer.new(Game.data.sprites.SPRITE_BIRD,
                                                 "free_fly_mount")
       Player.__freeFlyBird.__freeFlyAirSheet = true
+    end
+
+    -- an air sheet is recognized by tag OR by seed: renderers made by
+    -- a pre-fix build carry no tag, but every sky-family renderer is
+    -- seeded free_fly_*/wild_skies_*, so a poisoned session from an
+    -- older version still heals.  The engine's own player sheets seed
+    -- "player", and foreign mods' swaps are left alone.
+    Player.__freeFlyIsAirSheet = function(s)
+      if type(s) ~= "table" then return false end
+      if s.__freeFlyAirSheet then return true end
+      local seed = s.seed
+      return type(seed) == "string"
+        and (seed:find("^free_fly") ~= nil
+             or seed:find("^wild_skies") ~= nil)
     end
 
     -- the player's true walking sheet, rebuilt from the same field data
