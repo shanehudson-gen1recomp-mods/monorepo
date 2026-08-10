@@ -2,8 +2,10 @@
 
 A developer tool for mod authors. The START menu gains a HOOKS entry
 that lists every loaded mod; pick one to see its public surface: the
-exports other mods can call through `mod.find(id)`, and the events it
-broadcasts. Pick a hook to read its description.
+exports other mods can call through `mod.find(id)`, the engine hook
+chains it wraps (with priority and chain position, so shared-chain
+disputes are visible at a glance), and the events it broadcasts. Pick
+a hook to read its description.
 
 Every pick is also printed to the console (the terminal that launched
 the game), untruncated and copyable:
@@ -16,6 +18,12 @@ No mod has to cooperate to show up here:
 
 - Exports are enumerated live off the loader, so the list is what is
   actually installed and running, not what a document claims.
+- Wraps come off the live hook chains the same way: owner, priority
+  and position ride every chain entry, no metadata required.
+- An overhaul carrying more source files than the scan budget gets a
+  PARTIAL SCAN row saying how many files went unread (shallow files
+  are read first, so the entry file always is). Exports and wraps are
+  live-enumerated and complete regardless.
 - Events are found in the mod's own source. Only the owning mod may
   emit under `mod.<id>.*`, so any such string literal in its files
   names an event it broadcasts. A watcher on the event bus also

@@ -1,5 +1,5 @@
 return {
-  summary   = "Browse every installed mod's public exports and events from the START menu.",
+  summary   = "Browse every installed mod's public exports, engine-hook wraps and events from the START menu.",
   author    = "Shane Hudson",
   tags      = { "developer", "tool", "menu" },
   differences = {

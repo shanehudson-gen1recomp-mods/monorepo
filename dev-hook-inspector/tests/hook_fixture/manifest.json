@@ -4,5 +4,6 @@
   "version": "0.0.1",
   "entry": "main.lua",
   "api": 2,
+  "priority": 500,
   "description": "Fixture mod for the inspector's tests."
 }
