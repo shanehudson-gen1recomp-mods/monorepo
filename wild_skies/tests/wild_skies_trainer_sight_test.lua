@@ -128,6 +128,19 @@ T.eq(scanFor(tr, 1, "perch", true), nil,
   "no sighting while the overworld engages")
 ow.engaging = nil
 
+-- a flight system reporting isFlying without altitude() (Dramatic Sky
+-- Ride today) still counts as airborne; unknown height waives the band
+Game.mods.exports.some_flight_mod = {
+  isFlying = function() return flying end,
+}
+flying = true
+T.check(scanFor(tr, 1, "commute") ~= nil,
+  "isFlying-only flight systems are spotted at any height")
+Game.mods.exports.some_flight_mod = {
+  isFlying = function() return flying end,
+  altitude = function() return playerAlt end,
+}
+
 -- while moving (no hover), the cone never runs
 tr.mode = "commute"
 tr.alt = 40

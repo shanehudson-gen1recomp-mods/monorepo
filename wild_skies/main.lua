@@ -448,19 +448,24 @@ return function(mod)
   -- shared isFlying/altitude contract counts (never key on a mod id;
   -- free_fly and Dramatic Sky Ride both speak it).  Airborne when ANY
   -- system reports flying; the raw player field is the last resort.
+  -- returns airborne, altitudePx.  altitudePx is nil when the flight
+  -- system reports flying but offers no altitude() yet (callers treat
+  -- unknown height generously); a mod exporting only isFlying counts.
   local function flightState(p)
     local Game = require("src.core.Game")
     local exportsById = Game.mods and Game.mods.exports
     local sawProbe = false
     if exportsById then
       for _, ex in pairs(exportsById) do
-        if type(ex) == "table" and type(ex.isFlying) == "function"
-           and type(ex.altitude) == "function" then
+        if type(ex) == "table" and type(ex.isFlying) == "function" then
           sawProbe = true
           local ok, up = pcall(ex.isFlying)
           if ok and up == true then
-            local okA, alt = pcall(ex.altitude)
-            return true, okA and tonumber(alt) or 0
+            if type(ex.altitude) == "function" then
+              local okA, alt = pcall(ex.altitude)
+              return true, okA and tonumber(alt) or nil
+            end
+            return true, nil
           end
         end
       end
@@ -1047,17 +1052,31 @@ return function(mod)
                         TrainerRider)
   end
 
+  local function riderSeat(h)
+    return 6 * (h.rideScale or 1)
+  end
+
   function TrainerRider:pose()
     local h = self.host
-    return self.sprite, h.px, h.py - trainerLift(h) - 6,
+    return self.sprite, h.px, h.py - trainerLift(h) - riderSeat(h),
            h.facing, 0, false, false
   end
 
   function TrainerRider:draw(camX, camY)
     local h = self.host
-    local sy = math.floor(h.py - trainerLift(h) - 6 + 0.5)
+    local s = h.rideScale or 1
+    local sy = math.floor(h.py - trainerLift(h) - riderSeat(h) + 0.5)
+    if s ~= 1 then
+      local fx = math.floor(h.px + 8 - camX)
+      local fy = math.floor(sy + 12 - camY)
+      love.graphics.push()
+      love.graphics.translate(fx, fy)
+      love.graphics.scale(s, s)
+      love.graphics.translate(-fx, -fy)
+    end
     self.sprite:draw(math.floor(h.px + 0.5), sy, camX, camY,
                      h.facing, 0, false)
+    if s ~= 1 then love.graphics.pop() end
   end
 
   -- the donor's map object names the sheet the rider wears (gen 1
@@ -1111,6 +1130,10 @@ return function(mod)
     self.mount = mount
     self.sprite = sprite
     self.scale = Sky.dexScale(game.data, mount.species)
+    -- ridden mounts match the player's own ride proportions (the
+    -- flight mods draw theirs about 15% over dex scale), independent
+    -- of the BIRD SIZE wildlife slider
+    self.rideScale = self.scale * 1.15
     self.passable = true
     self.hailer = love.math.random() < 0.35
     self.speed = 30
@@ -1182,7 +1205,10 @@ return function(mod)
     if airborne then
       local myAlt = self.mode == "perch" and (self.perchAlt or 0)
         or self.alt or 0
-      if math.abs(myAlt - playerAlt) > SIGHT_BAND then return end
+      if playerAlt ~= nil
+         and math.abs(myAlt - playerAlt) > SIGHT_BAND then
+        return
+      end
     else
       if self.mode ~= "perch" and (self.alt or 0) > LOW_ALT then return end
     end
@@ -1394,7 +1420,7 @@ return function(mod)
   end
 
   function SkyTrainer:draw(camX, camY)
-    local s = (self.scale or 1) * sizeMult()
+    local s = self.rideScale or 1
     local lift = trainerLift(self)
     local fade = math.max(0.35, 1 - lift / 90)
     local size = math.max(0.6, 1 - lift / 140)
