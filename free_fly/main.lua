@@ -20,23 +20,33 @@ return function(mod)
       .. "in the gen1recomp-mods repo to sync shared code; mod disabled")
     return
   end
-  local followerLandingSrc = mod:read("lib/FollowerLanding.lua")
-  if not followerLandingSrc then
-    mod.log:error("lib/FollowerLanding.lua is missing; reinstall the mod")
+  local function loadLib(file)
+    local src = mod:read("lib/" .. file)
+    if not src then return nil end
+    local chunk, err = (loadstring or load)(src, "@free_fly/lib/" .. file)
+    if not chunk then
+      mod.log:error("could not load lib/%s: %s; mod disabled", file,
+        tostring(err))
+      return nil
+    end
+    local ok, result = pcall(chunk)
+    if not ok then
+      mod.log:error("could not initialize lib/%s: %s; mod disabled", file,
+        tostring(result))
+      return nil
+    end
+    return result
+  end
+  local FlightInput = loadLib("FlightInput.lua")
+  local VoxelProvider = loadLib("VoxelProvider.lua")
+  if not (FlightInput and VoxelProvider) then
+    mod.log:error("Free Fly compatibility helpers are missing; reinstall the mod")
     return
   end
-  local followerLandingChunk, followerLandingErr = (loadstring or load)(
-    followerLandingSrc, "@free_fly/lib/FollowerLanding.lua")
-  if not followerLandingChunk then
-    mod.log:error("could not load follower landing support: %s; reinstall the mod",
-      tostring(followerLandingErr))
-    return
-  end
-  local followerLandingOk, FollowerLanding = pcall(followerLandingChunk)
-  if not followerLandingOk or type(FollowerLanding) ~= "table"
-      or type(FollowerLanding.rebuild) ~= "function" then
-    mod.log:error("could not initialize follower landing support: %s; reinstall the mod",
-      tostring(FollowerLanding))
+  local FollowerLanding = loadLib("FollowerLanding.lua")
+  if not (type(FollowerLanding) == "table"
+      and type(FollowerLanding.rebuild) == "function") then
+    mod.log:error("could not initialize follower landing support; reinstall the mod")
     return
   end
 
@@ -106,6 +116,54 @@ return function(mod)
 
   local function flying() return state.phase ~= "idle" end
 
+  -- Dramatic Shape's maintained/original build and the battle-art fork expose
+  -- the same public library seam under different mod ids.  Resolving only the
+  -- original id leaves movement permissive but drops every visual half of
+  -- flight under the fork: terrain height, lifted camera, first/third-person
+  -- movement and cockpit presentation.
+  local voxelLib = VoxelProvider.lib
+
+  -- Is a battle screen present NOW?
+  --
+  -- The old answer was an event latch.  That is sufficient for an ordinary
+  -- BattleState, whose enter/finish always emit a matched started/ended pair,
+  -- but a co-op mod can replace or hold that state and own a battle screen of
+  -- its own.  Seeing the ordinary start without its displaced finish leaves a
+  -- historical latch true forever: FREEFLY appears in a menu built just before
+  -- the event, refuses when selected, and then disappears from every later
+  -- menu.  The stack is the authority because it answers the question being
+  -- asked.  The latch remains a fallback for headless/older engines whose
+  -- stack does not expose its state list.
+  local function battleRunning(game)
+    local stack = game and game.stack
+    local screens = stack and stack.states
+    if type(screens) ~= "table" then return state.inBattle == true end
+    local ok, BattleState = pcall(require, "src.battle.BattleState")
+    for _, screen in ipairs(screens) do
+      if screen and (screen.isBattleScreen == true
+          or (ok and getmetatable(screen) == BattleState)) then
+        return true
+      end
+    end
+    -- A settled stack disproves a stale event latch.
+    return false
+  end
+
+  -- Capture the semantic B edge before Input:step drains pressQueue.  The
+  -- ordinary wasPressed edge remains the in-world fallback below, but this
+  -- boundary is authoritative for a short keyboard tap (X/Backspace), a pad
+  -- tap, and another mod's source-safe injected B alike.
+  mod.hooks:wrap("input.step", function(nextFn, game, dt)
+    local top = game and game.stack and game.stack:top()
+    FlightInput.capture(game and game.input,
+      flying() and top ~= nil and top.isOverworld == true,
+      function()
+        state.landRequest = true
+        mod.log:info("landing requested")
+      end)
+    return nextFn(game, dt)
+  end, 1000)
+
   -- ------- public API
   -- Flight state for other mods; the takeoff/landed events below are
   -- the push-style counterpart.  Nothing here hands out internals.
@@ -169,8 +227,12 @@ return function(mod)
   function Rider:pose()
     local p = self.player
     local lift = math.floor((p.freeFlyAlt or 0) + 0.5)
+    -- Thick voxel characters need more clearance than flat billboards or the
+    -- mount's body hides the trainer completely.  This ghost exists only in
+    -- pipeline rendering; the flat path composes its own seated rider.
+    local clearance = 12
     -- always the WALKING sheet: while airborne p.sprite is the mount
-    return p.freeFlyWalkSprite or p.sprite, p.px, p.py - lift - 6,
+    return p.freeFlyWalkSprite or p.sprite, p.px, p.py - lift - clearance,
            p.facing, 0, false, false
   end
   function Rider:draw() end
@@ -246,7 +308,7 @@ return function(mod)
     if flying() then return end
     -- the last line of defense: no route into flight is legal in battle,
     -- however the caller got here
-    if state.inBattle then
+    if battleRunning(game) then
       mod.log:warn("takeoff refused: a battle is running")
       return
     end
@@ -334,7 +396,7 @@ return function(mod)
     if type(out) ~= "table" then return out end
     -- the battle switch menu also runs through this hook; taking off
     -- from there would unwind the battle screen itself
-    if (ctx and ctx.battle) or state.inBattle then return out end
+    if (ctx and ctx.battle) or battleRunning(game) then return out end
     local ow = ctx and ctx.overworld
     if not (ow and ow.map and ow.map.def) or flying() then return out end
     if not (eligibleFlyer(game, ow, mon) and badgeOk(game, mon)) then return out end
@@ -343,7 +405,7 @@ return function(mod)
     table.insert(out, 1, { label = "FREEFLY", onSelect = function(m, g)
       -- a stale entry (menu built before a battle started) must not
       -- unwind the battle screen below it
-      if state.inBattle then return end
+      if battleRunning(g) then return end
       -- unwind party menu / start menu back to the overworld, then lift off
       local stack = g.stack
       while stack:top() and not stack:top().isOverworld do stack:pop() end
@@ -534,8 +596,7 @@ return function(mod)
       -- resolved once, not per frame
       if state.fpRef == nil then
         state.fpRef = false
-        local exports = game.mods and game.mods.exports
-        local V = exports and exports.DRAMATIC_SHAPE and exports.DRAMATIC_SHAPE.lib
+        local V = voxelLib(game)
         local okFP, fp = pcall(function() return V and V.require("FirstPerson") end)
         if okFP and fp then state.fpRef = fp end
       end
@@ -547,7 +608,7 @@ return function(mod)
         if not hudLogged then
           hudLogged = true
           mod.log:info("cockpit idle (%s)",
-            not FP and "no DRAMATIC_SHAPE lib"
+            not FP and "no compatible voxel lib"
             or not FP.hidePlayer and "no hidePlayer api" or "card visible")
         end
         return
@@ -623,8 +684,7 @@ return function(mod)
     local function tileHeightAt(map, cx, cy)
       if tileShape == nil then
         tileShape = false
-        local exports = Game.mods and Game.mods.exports
-        local V = exports and exports.DRAMATIC_SHAPE and exports.DRAMATIC_SHAPE.lib
+        local V = voxelLib(Game)
         if V and V.require then
           local ok, ts = pcall(V.require, "TileShape")
           if ok and ts and ts.forMap then tileShape = ts end
@@ -775,8 +835,7 @@ return function(mod)
     local function mesherBusy()
       if state.mesherRef == nil then
         state.mesherRef = false
-        local exports = Game.mods and Game.mods.exports
-        local V = exports and exports.DRAMATIC_SHAPE and exports.DRAMATIC_SHAPE.lib
+        local V = voxelLib(Game)
         local ok, cm = pcall(function() return V and V.require("ChunkMesher") end)
         if ok and cm and cm.pending then state.mesherRef = cm end
       end
@@ -801,7 +860,7 @@ return function(mod)
     -- same gates as the FREEFLY menu entry.  Returns ok, failure text.
     local function partnerTakeoff(ow)
       local save = Game.save
-      if state.inBattle then
+      if battleRunning(Game) then
         return false, "This isn't the\ntime to use that!"
       end
       if not (save and ow.map and ow.map.def) then
@@ -1564,9 +1623,7 @@ return function(mod)
         local rung = Pipelines.level("voxel") or 0
         if state.voxelStateRef == nil then
           state.voxelStateRef = false
-          local exports = Game.mods and Game.mods.exports
-          local V = exports and exports.DRAMATIC_SHAPE
-            and exports.DRAMATIC_SHAPE.lib
+          local V = voxelLib(Game)
           local okV, vs = pcall(function()
             return V and V.require("VoxelState")
           end)
@@ -1596,9 +1653,7 @@ return function(mod)
       local vsRef = state.voxelStateRef
       if state.v3dRef == nil then
         state.v3dRef = false
-        local exports = Game.mods and Game.mods.exports
-        local V = exports and exports.DRAMATIC_SHAPE
-          and exports.DRAMATIC_SHAPE.lib
+        local V = voxelLib(Game)
         local okV3, v3 = pcall(function()
           return V and V.require("Voxel3D")
         end)
@@ -1766,8 +1821,7 @@ return function(mod)
     local TileRenderer = require("src.render.TileRenderer")
     TileRenderer.__freeFlySkip = nil
     pcall(function()
-      local exports = Game.mods and Game.mods.exports
-      local V = exports and exports.DRAMATIC_SHAPE and exports.DRAMATIC_SHAPE.lib
+      local V = voxelLib(Game)
       local CM = V and V.require("ChunkMesher")
       if CM then CM.__freeFlyBodyOnly = nil end
     end)
