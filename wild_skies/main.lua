@@ -244,6 +244,18 @@ return function(mod)
       detach(ow, f)
       table.remove(flyers, i)
     end
+    for i = #trainers, 1, -1 do
+      local tr = trainers[i]
+      detach(ow, tr)
+      if tr.rider then detach(ow, tr.rider) end
+      table.remove(trainers, i)
+    end
+    -- a mid-engage trainer must never leave the freeze behind
+    if ow and ow.engaging and ow.emote and ow.emote.npc
+       and ow.emote.npc.skyTrainer then
+      ow.engaging = false
+      ow.emote = nil
+    end
   end
 
   -- ------- inter-mod API
@@ -1469,6 +1481,30 @@ return function(mod)
     return tr
   end
   mod.exports.__skyTrainerDebug.list = function() return trainers end
+  -- SKY TRAINERS toggled off live: every keeper wraps up and flies out
+  -- instead of popping, and a held engage releases first so the freeze
+  -- can never outlive the option
+  mod.events:on("mod.options_changed", function(payload)
+    if not payload or payload.mod ~= "wild_skies"
+       or payload.key ~= "trainers" or payload.value ~= false then
+      return
+    end
+    local Game = require("src.core.Game")
+    local ow = Game and Game.overworld
+    for _, tr in ipairs(trainers) do
+      if ow and ow.emote and ow.emote.npc == tr then ow.emote = nil end
+      if tr.mode == "await" or tr.mode == "swoop"
+         or tr.mode == "standoff" or tr.mode == "standby" then
+        if expectingSkyBattle and expectingSkyBattle.trainer == tr then
+          expectingSkyBattle = nil
+        end
+        tr:disengage(ow, "leave")
+      else
+        tr.mode = "leave"
+      end
+    end
+  end)
+
   mod.exports.__skyTrainerDebug.donorAllowed = function(i, asFighter)
     local d = SKY_TRAINER_DONORS[i]
     if not d then return false end
@@ -1823,7 +1859,7 @@ return function(mod)
     OC.__wildSkiesCarry = function(self, dir, conn, origCross)
       local p = self.player
       local beforeX, beforeY = p.px, p.py
-      keepThroughSeam = #flyers > 0
+      keepThroughSeam = #flyers > 0 or #trainers > 0
       local crossed = origCross(self, dir, conn)
       if not crossed then
         keepThroughSeam = false
@@ -1838,6 +1874,22 @@ return function(mod)
         f.mapW = ((self.map.widthCells or (self.map.width or 10) * 2)) * 16
         f.mapH = ((self.map.heightCells or (self.map.height or 9) * 2)) * 16
         table.insert(self.entities, f)
+      end
+      for _, tr in ipairs(trainers) do
+        tr.px, tr.py = tr.px + dx, tr.py + dy
+        if tr.landX then
+          tr.landX, tr.landY = tr.landX + dx, tr.landY + dy
+        end
+        tr.cellX = math.floor((tr.px + 8) / 16)
+        tr.cellY = math.floor((tr.py + 8) / 16)
+        tr.mapW = ((self.map.widthCells or (self.map.width or 10) * 2)) * 16
+        tr.mapH = ((self.map.heightCells or (self.map.height or 9) * 2)) * 16
+        table.insert(self.entities, tr)
+        if tr.rider then
+          tr.rider.px, tr.rider.py = tr.px, tr.py
+          tr.rider.cellX, tr.rider.cellY = tr.cellX, tr.cellY
+          table.insert(self.entities, tr.rider)
+        end
       end
       return crossed
     end

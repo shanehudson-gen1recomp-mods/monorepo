@@ -9,6 +9,14 @@ local os = require("os")
 local T = require("tests.modkit")
 local Data = require("src.core.Data"); Data:load()
 
+local OC = {}
+OC.update = function() end
+OC.draw = function() end
+package.loaded["src.world.OverworldController"] = OC
+package.loaded["src.world.Map"] = { isOutside = function() return true end }
+package.loaded["src.world.FieldDefaults"] = {
+  field = function() return {} end }
+
 local ow = {
   entities = {},
   camera = { x = 0, y = 0 },
@@ -30,13 +38,17 @@ package.loaded["src.core.Game"] = {
 Data.sprites = Data.sprites or {}
 Data.sprites.SPRITE_BIRD = Data.sprites.SPRITE_BIRD
   or { image = "fixture_bird.png", frames = 6 }
+Data.sprites.SPRITE_COOLTRAINER_M = Data.sprites.SPRITE_COOLTRAINER_M
+  or { image = "fixture_trainer.png", frames = 6 }
 
 local run = T.sdk.loadMod(os.getenv("MOD_DIR") or "mods/wild_skies",
   { data = Data })
 T.check(run.mod ~= nil, "mod discovered and loaded")
 T.eq(#run.errors, 0, "loads clean")
+run.loader.events:emit("game.ready")
 
 local api = run.loader.exports.wild_skies
+local dbg = api.__skyTrainerDebug
 
 local function spawnRoamer()
   for _ = 1, 8 do
@@ -91,6 +103,61 @@ lingerer.cellX, lingerer.cellY = -1, 5
 lingerer.oobT = 25
 lingerer:tick(ow, 0.05)
 T.check(lingerer.dead, "out of bounds for too long: safety despawn")
+
+-- ------- trainers ride the seam carry, map exits and toggle-off
+
+-- the seam carry translates trainers (and riders) like flyers and
+-- re-attaches them to the rebuilt entity list
+local tr = dbg.spawn(1)
+T.check(tr ~= nil, "trainer spawned for the carry")
+tr.px, tr.py = 160, 160
+tr.cellX, tr.cellY = 10, 10
+tr.mode = "commute"
+local crossed = OC.__wildSkiesCarry(ow, "down", {},
+  function(self, dir, conn)
+    self.player.px = self.player.px - 320
+    self.player.py = self.player.py - 320
+    self.entities = { self.player }
+    return true
+  end)
+T.eq(crossed, true, "the crossing itself succeeded")
+T.eq(tr.px, 160 - 320, "trainer rebased with the player")
+local attached, riderAttached = false, false
+for _, e in ipairs(ow.entities) do
+  if e == tr then attached = true end
+  if e == tr.rider then riderAttached = true end
+end
+T.check(attached, "trainer re-attached after the seam")
+T.check(riderAttached, "rider re-attached after the seam")
+
+-- the seam's own map.exited must NOT clear what the carry kept
+run.loader.events:emit("map.exited", {})
+T.eq(#dbg.list(), 1, "the carried trainer survives the seam's map swap")
+
+-- but a real exit (a door, a cave) clears trainers with the birds
+run.loader.events:emit("map.exited", {})
+T.eq(#dbg.list(), 0, "a real map exit clears the trainers")
+for _, e in ipairs(ow.entities) do
+  T.check(e ~= tr and e ~= tr.rider, "no trainer entity survives the exit")
+end
+
+-- toggling SKY TRAINERS off flies the live ones out
+local tr2 = dbg.spawn(1)
+tr2.mode = "commute"
+run.loader.events:emit("mod.options_changed",
+  { mod = "wild_skies", key = "trainers", value = false })
+T.eq(tr2.mode, "leave", "live trainer leaves on toggle-off")
+
+-- and an engaged one releases the freeze before it goes
+local tr3 = dbg.spawn(1)
+tr3.mode = "await"
+ow.engaging = true
+ow.emote = { npc = tr3, frames = 60, onDone = function() end }
+run.loader.events:emit("mod.options_changed",
+  { mod = "wild_skies", key = "trainers", value = false })
+T.eq(ow.engaging, false, "toggle-off releases a held engage")
+T.eq(ow.emote, nil, "and clears our bubble")
+T.eq(tr3.mode, "leave", "the engaged trainer leaves too")
 
 run.release()
 T.finish("wild_skies_seam_edge")
