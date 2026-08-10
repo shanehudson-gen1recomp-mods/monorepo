@@ -114,6 +114,11 @@ T.eq(last[2], "trainer", "as a trainer battle")
 T.eq(last[3], "OPP_BIRD_KEEPER", "the donor class")
 T.check(type(last[4]) == "number", "and the donor party")
 T.eq(rows[1][1], "show_text", "the challenge line leads")
+local savedWon = false
+for _, row in ipairs(rows) do
+  if row[1] == "save_end_battle_text" then savedWon = true end
+end
+T.check(savedWon, "the donor's won line is armed for the battle box")
 
 -- the battle starting hands the stack over and releases the freeze
 run.loader.events:emit("battle.started", {})

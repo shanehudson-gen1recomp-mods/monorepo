@@ -1245,6 +1245,11 @@ return function(mod)
     end
     local rows = {}
     if h and h.battle then rows[#rows + 1] = { "show_text", h.battle } end
+    -- the donor's own defeat line closes his battle (the tagged
+    -- end-battle box; a plain show_text would land after the payout)
+    if h and h.won then
+      rows[#rows + 1] = { "save_end_battle_text", h.won }
+    end
     rows[#rows + 1] = { "start_battle", "trainer",
                         self.donor.class, self.donor.party }
     expectingSkyBattle = { trainer = self, donor = self.donor,
