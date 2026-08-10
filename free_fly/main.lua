@@ -1238,6 +1238,12 @@ return function(mod)
         if p.freeFlyAlt then p.freeFlyAlt, p.freeFlying = nil, nil end
         if p.freeFlyWalkSprite then
           p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
+        elseif p.sprite and p.sprite.__freeFlyAirSheet then
+          -- a lost session left the mount on the player and took the
+          -- stash with it; rebuild the real walking sheet
+          local walk = Player.__freeFlyWalkRebuild
+            and Player.__freeFlyWalkRebuild()
+          if walk then p.sprite = walk end
         end
         if state.placedCam and state.v3dRef
            and state.v3dRef.camera == state.placedCam then
@@ -1298,7 +1304,15 @@ return function(mod)
       -- walking sheet is stashed for the rider overlay and the landing
       local mount = Player.__freeFlyMount or Player.__freeFlyBird
       if mount and p.sprite ~= mount then
-        p.freeFlyWalkSprite = p.freeFlyWalkSprite or p.sprite
+        if not p.freeFlyWalkSprite then
+          -- never stash one of our own air sheets (a stale mount from
+          -- a lost session): landing would restore the wrong figure
+          -- forever after.  Rebuild the real walking sheet instead.
+          p.freeFlyWalkSprite = (p.sprite
+              and not p.sprite.__freeFlyAirSheet) and p.sprite
+            or (Player.__freeFlyWalkRebuild
+                and Player.__freeFlyWalkRebuild()) or nil
+        end
         p.sprite = mount
       end
       syncRider(ow, p)
@@ -1380,6 +1394,10 @@ return function(mod)
             p.freeFlying, p.freeFlyAlt, p.freeFlyCanLand = nil, nil, nil
             if p.freeFlyWalkSprite then
               p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
+            elseif p.sprite and p.sprite.__freeFlyAirSheet then
+              local walk = Player.__freeFlyWalkRebuild
+                and Player.__freeFlyWalkRebuild()
+              if walk then p.sprite = walk end
             end
             emitLanded("landed", p)
             return
@@ -1874,6 +1892,21 @@ return function(mod)
     if Game.data.sprites.SPRITE_BIRD then
       Player.__freeFlyBird = SpriteRenderer.new(Game.data.sprites.SPRITE_BIRD,
                                                 "free_fly_mount")
+      Player.__freeFlyBird.__freeFlyAirSheet = true
+    end
+
+    -- the player's true walking sheet, rebuilt from the same field data
+    -- Player.new reads: the recovery when a lost session (hot reload, a
+    -- mod update mid-flight) left an air sheet on the player with no
+    -- stash to restore from
+    Player.__freeFlyWalkRebuild = function()
+      local ok, sprite = pcall(function()
+        local FieldDefaults = require("src.world.FieldDefaults")
+        local walkId = FieldDefaults.fieldValue(Game.data,
+          "playerSprites", "walk")
+        return SpriteRenderer.new(Game.data.sprites[walkId], "player")
+      end)
+      return ok and sprite or nil
     end
 
     -- mount identity: the chosen mon's party-icon class maps onto a real
@@ -1885,6 +1918,9 @@ return function(mod)
       Player.__freeFlyMount = (species
         and Sky.mountSprite(Game.data, species, "free_fly"))
         or Player.__freeFlyBird
+      if Player.__freeFlyMount then
+        Player.__freeFlyMount.__freeFlyAirSheet = true
+      end
       Player.__freeFlyMountScale = species
         and Sky.dexScale(Game.data, species) or 1
     end
