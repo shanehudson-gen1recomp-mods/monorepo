@@ -160,22 +160,39 @@ function Sky.mountSprite(data, species, seedPrefix)
   if borrowed then return borrowed, class end
   local spriteId = (class and Sky.MOUNT_SPRITES[class]) or "SPRITE_BIRD"
   local def = data.sprites and data.sprites[spriteId]
-  -- On Gold (probed from the encounter shape, so leftover gen2 tables
-  -- on a Gen 1 boot never trigger this) every species maps to its own
-  -- overworld icon, which beats the generic walker sheets: those are
-  -- Gen 1 art and draw unpaletted grayscale there.  The def shape is
-  -- the one the engine's own day-care mon stands on.
+  -- Gold arm, probed from the encounter shape so leftover gen2 tables
+  -- on a Gen 1 boot never trigger it.  Gold's cache ships real walker
+  -- sheets for a few dozen species, so the ladder is: the species'
+  -- own sheet, then the sheet matching its icon assignment
+  -- (ICON_ODDISH -> SPRITE_ODDISH), then the generic bird, and only
+  -- then the flat two-frame icon strip (the day-care mon's def
+  -- shape).  Every rung is baked in the species' shipped colours
+  -- below, so the shared sheets still read per-species.
+  local goldColours = false
   if Sky.gen2Encounters(data.encounters) then
+    local sprites = data.sprites or {}
     local icons = data.gen2Icons
     local iconId = icons and icons.species and icons.species[species]
-    local entry = iconId and icons.icons and icons.icons[iconId]
-    if entry and entry.image then
-      spriteId = "SKY_ICON_" .. tostring(iconId) .. "_" .. tostring(species)
-      def = { id = spriteId, image = entry.image,
-              frames = entry.frames or 1,
-              walker = false, spriteType = "POKEMON_SPRITE",
-              palette = "PAL_OW_RED", paletteId = 0,
-              species = species, icon = iconId }
+    local walkerDef = sprites["SPRITE_" .. tostring(species)]
+      or (type(iconId) == "string"
+          and sprites[iconId:gsub("^ICON_", "SPRITE_")])
+      or sprites.SPRITE_BIRD
+    if walkerDef then
+      def = walkerDef
+      spriteId = (walkerDef.id or "SPRITE_?") .. "_" .. tostring(species)
+      goldColours = true
+    else
+      local entry = iconId and icons.icons and icons.icons[iconId]
+      if entry and entry.image then
+        spriteId = "SKY_ICON_" .. tostring(iconId) .. "_"
+          .. tostring(species)
+        def = { id = spriteId, image = entry.image,
+                frames = entry.frames or 1,
+                walker = false, spriteType = "POKEMON_SPRITE",
+                palette = "PAL_OW_RED", paletteId = 0,
+                species = species, icon = iconId }
+        goldColours = true
+      end
     end
   end
   if not def then return nil, class end
@@ -185,9 +202,9 @@ function Sky.mountSprite(data, species, seedPrefix)
     local okR, renderer = pcall(SpriteRenderer.new, def,
       (seedPrefix or "shared") .. "_" .. spriteId)
     mountCache[key] = okR and renderer or false
-    -- the species' own shipped colours (its battle-pic pair) make the
-    -- icon read as that species instead of the engine-default red
-    if mountCache[key] and def.icon then
+    -- the species' own shipped colours (its battle-pic pair) make
+    -- Gold's shared sheets read per-species instead of engine red
+    if mountCache[key] and goldColours then
       pcall(function()
         local Palettes = require("src.world.gen2.Palettes")
         local colors = Palettes.monColors(data.gen2Palettes, species)
@@ -198,8 +215,10 @@ function Sky.mountSprite(data, species, seedPrefix)
       -- an icon sheet is a two-frame ANIMATION strip, not a facing
       -- set: the stock pose tables would pin it to one frame forever,
       -- so this draw picks the frame from the caller's flap phase and
-      -- mirrors on a rightward heading
-      if (def.frames or 1) > 1 and renderer.getScreenOrigin then
+      -- mirrors on a rightward heading.  Walker sheets keep the stock
+      -- pose tables.
+      if def.icon and (def.frames or 1) > 1
+         and renderer.getScreenOrigin then
         renderer.draw = function(self, px, py, camX, camY, facing,
                                  walkPhase)
           local x, y = self:getScreenOrigin(px, py, camX, camY)

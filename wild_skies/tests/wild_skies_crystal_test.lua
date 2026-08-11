@@ -39,6 +39,7 @@ Data.encounters.GEN2_ROAD = {
   grass = { rate = 25, slots = {
     { species = "SKARMORY", level = 25 },
     { species = "XATU", level = 24 },
+    { species = "DODUO", level = 24 },
   } },
 }
 
@@ -161,6 +162,7 @@ T.eq(hosts.XATU, nil, "the ecology's night species sits out the day")
 hosts = skyHosts("PALLET_TOWN", "DAY")
 T.check(hosts.SKARMORY ~= nil, "Skarmory patrols the town by day")
 T.eq(hosts.XATU, nil, "but Xatu only flies at night")
+T.eq(hosts.DODUO, nil, "a flightless FLYING type never joins the sky")
 
 -- Visible neighbor populations use the same derived dataset and ecology as
 -- the current map rather than falling back to the original Gen 1 hand lists.

@@ -19,8 +19,12 @@
     ecology probe applies, so Hoothoot owns Johto's night without a
     hand list.
   - Flyers are drawn through a tail on Gold's `World:drawPeople` (its
-    world never draws the entity list) and dressed in the species'
-    own overworld icon from the imported Gold cache.
+    world never draws the entity list) and dressed from the imported
+    Gold cache: the species' own walker sheet where Gold ships one
+    (Moltres, Ho-Oh, Butterfree and some thirty more), else the sheet
+    its icon assignment names (Hoppip flies as Gold's Oddish walker),
+    else the gold bird, else its two-frame menu icon. Every rung is
+    baked in the species' shipped colours.
   - View size, outdoors detection and badge count each read the Gold
     answer where the Gen 1 seam does not exist (`viewW/viewH`, the
     header's environment byte, `save.player.badges`).
@@ -34,9 +38,9 @@
 - Not yet play-tested on a real Gold boot; `modkit gen2check` verdict
   is "will load but degrade", where the one remaining warning is a
   Gen 1-only call site Gold never reaches at runtime.
-- On Gold, birds prefer their species' own coloured Gen 2 overworld
-  icon over the generic Gen 1 walker sheets, with the engine's own
-  palette baked in.
+- Flightless FLYING types never join the sky on either generation:
+  the dex has Doduo and Dodrio running and Natu hopping, so they stay
+  on the ground where they belong.
 
 ## 1.8.0
 

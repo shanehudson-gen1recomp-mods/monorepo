@@ -85,6 +85,11 @@ return function(mod)
   local NIGHT_ONLY = { ZUBAT = true, GOLBAT = true, CROBAT = true,
                        HOOTHOOT = true, NOCTOWL = true, MURKROW = true }
 
+  -- FLYING-typed but flightless: the type exists for battle mechanics,
+  -- the sky asks a different question.  The dex has Doduo and Dodrio
+  -- running, and Natu hopping; none of them belongs overhead.
+  local FLIGHTLESS = { DODUO = true, DODRIO = true, NATU = true }
+
   -- the sparse pools for outdoor maps whose slots offer no flyers;
   -- repeats weight the roll.  Open water gets its own pool: Pidgeot
   -- skims the waves hunting Magikarp per its own dex entry, and a
@@ -130,7 +135,8 @@ return function(mod)
     for _, row in ipairs(Sky.wildRows(data)) do
       for _, slot in ipairs(row.slots) do
         local s = slot.species
-        if Sky.hasType(data, s, "FLYING") and not ULTRA_SET[s] then
+        if Sky.hasType(data, s, "FLYING") and not ULTRA_SET[s]
+           and not FLIGHTLESS[s] then
           local rec = recs[s]
           if not rec then
             rec = { count = 0, lo = math.huge, hi = 0 }
@@ -458,7 +464,8 @@ return function(mod)
     nocturnal = nocturnal or NIGHT_ONLY
     local all, night = {}, {}
     for _, slot in ipairs(Sky.grassSlots(game.data, mapId, tod)) do
-      if Sky.hasType(game.data, slot.species, "FLYING") then
+      if Sky.hasType(game.data, slot.species, "FLYING")
+         and not FLIGHTLESS[slot.species] then
         local pick = { species = slot.species, level = slot.level }
         if nocturnal[slot.species] then
           night[#night + 1] = pick

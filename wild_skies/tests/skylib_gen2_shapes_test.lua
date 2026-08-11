@@ -107,24 +107,45 @@ package.loaded["src.world.gen2.Palettes"] = {
 }
 local goldData = {
   encounters = gold.encounters,
-  pokemon = { HOOTHOOT = { icon = "BIRD" } },
+  pokemon = { HOOTHOOT = { icon = "BIRD" }, MOLTRES = {},
+              HOPPIP = {} },
   icons = {},
-  sprites = { SPRITE_BIRD = { image = "gen1_bird.png", frames = 6 } },
-  gen2Icons = { species = { HOOTHOOT = "ICON_BIRD" },
-                icons = { ICON_BIRD = { image = "icons/owl.png",
+  sprites = {
+    SPRITE_BIRD = { id = "SPRITE_BIRD", image = "gold_bird.png",
+                    frames = 6, walker = true },
+    SPRITE_MOLTRES = { id = "SPRITE_MOLTRES",
+                       image = "gold_moltres.png",
+                       frames = 6, walker = true },
+    SPRITE_ODDISH = { id = "SPRITE_ODDISH", image = "gold_oddish.png",
+                      frames = 6, walker = true },
+  },
+  gen2Icons = { species = { HOOTHOOT = "ICON_BIRD",
+                            HOPPIP = "ICON_ODDISH",
+                            MOLTRES = "ICON_BIRD" },
+                icons = { ICON_BIRD = { image = "icons/bird.png",
                                         frames = 2 } } },
   gen2Palettes = { tag = "gold-palettes" },
 }
+local moltres = Sky.mountSprite(goldData, "MOLTRES", "t2")
+T.eq(moltres.def.image, "gold_moltres.png",
+     "a species' own walker sheet wins")
+T.eq(moltres.colors and moltres.colors[2], "MOLTRES",
+     "shared sheets are baked in the species' shipped colours")
+local hoppip = Sky.mountSprite(goldData, "HOPPIP", "t2")
+T.eq(hoppip.def.image, "gold_oddish.png",
+     "the icon assignment picks the matching walker sheet")
 local owl = Sky.mountSprite(goldData, "HOOTHOOT", "t2")
-T.eq(owl.def.image, "icons/owl.png",
-     "gold prefers the species icon over the generic sheet")
-T.eq(owl.def.species, "HOOTHOOT", "icon def carries its species")
-T.eq(owl.colors and owl.colors[2], "HOOTHOOT",
-     "the species' shipped colours are baked in")
-T.eq(owl.def.frames, 2, "the icon's two animation frames carry over")
-T.check(owl.draw ~= nil, "two-frame icons get the flap-phase draw")
+T.eq(owl.def.image, "gold_bird.png",
+     "no species sheet falls to the generic gold bird")
+T.check(owl.draw == nil, "walker sheets keep the stock pose tables")
 T.check(Sky.mountSprite(goldData, "HOOTHOOT", "t2") == owl,
-        "gold icon renderer cached per species")
+        "gold renderers cached per species")
+goldData.sprites = {}
+local iconOnly = Sky.mountSprite(goldData, "HOOTHOOT", "t2icon")
+T.eq(iconOnly.def.image, "icons/bird.png",
+     "no walker sheets falls to the two-frame icon strip")
+T.eq(iconOnly.def.frames, 2, "the icon's animation frames carry over")
+T.check(iconOnly.draw ~= nil, "icon strips get the flap-phase draw")
 local gen1Bird = Sky.mountSprite({
   encounters = gen1.encounters,
   pokemon = { PIDGEY = { icon = "BIRD" } }, icons = {},
