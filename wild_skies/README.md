@@ -14,6 +14,11 @@ together. They rest on the grass, and with the Dramatic Shape Voxel Mod
 installed also on building roofs, then fly off when you get close or
 when their visit is over.
 
+Connected outdoor maps keep distinct resident flocks. Birds visible across a
+seam are already moving there and become that map's live flock when you cross,
+while the area behind remains populated. Doors and other full transitions
+still refresh the sky.
+
 The sky is busy, so most birds are scenery: only the bold ones (about a
 third) will meet you head on. If you reach a bold low one before it
 gets away, a normal wild battle starts with that species and level, and

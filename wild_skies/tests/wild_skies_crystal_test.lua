@@ -43,7 +43,7 @@ Data.encounters.GEN2_ROAD = {
 }
 
 local ow = {
-  entities = {},
+  entities = {}, ghosts = {}, neighbors = {},
   camera = { x = 0, y = 0 },
   player = { cellX = 15, cellY = 15, px = 240, py = 240 },
   tod = "DAY",
@@ -161,6 +161,27 @@ T.eq(hosts.XATU, nil, "the ecology's night species sits out the day")
 hosts = skyHosts("PALLET_TOWN", "DAY")
 T.check(hosts.SKARMORY ~= nil, "Skarmory patrols the town by day")
 T.eq(hosts.XATU, nil, "but Xatu only flies at night")
+
+-- Visible neighbor populations use the same derived dataset and ecology as
+-- the current map rather than falling back to the original Gen 1 hand lists.
+local gen2Neighbor = {
+  id = "GEN2_ROAD", def = { tileset = "OVERWORLD" },
+  widthCells = 30, heightCells = 30,
+  inBounds = ow.map.inBounds,
+  isWalkableCell = ow.map.isWalkableCell,
+}
+freshSky("PALLET_TOWN", "DAY")
+ow.neighbors = { { map = gen2Neighbor, ox = 480, oy = 0 } }
+run.loader.events:emit("map.entered")
+T.check(ow.ghosts[1] and ow.ghosts[1].npc.species == "SKARMORY",
+  "a resident day neighbor uses the derived Crystal sky")
+
+freshSky("PALLET_TOWN", "NITE")
+ow.ghosts, ow.neighbors = {}, { { map = gen2Neighbor, ox = 480, oy = 0 } }
+run.loader.events:emit("map.entered")
+T.check(ow.ghosts[1] and ow.ghosts[1].npc.species == "XATU",
+  "a resident night neighbor honors the exported ecology")
+ow.neighbors = {}
 
 -- and the night sky belongs to what the ecology marks nocturnal
 hosts = skyHosts("PALLET_TOWN", "NITE")
