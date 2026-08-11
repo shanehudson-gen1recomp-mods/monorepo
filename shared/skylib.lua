@@ -195,6 +195,26 @@ function Sky.mountSprite(data, species, seedPrefix)
           renderer:setObjPalette(colors, "sky:" .. tostring(species))
         end
       end)
+      -- an icon sheet is a two-frame ANIMATION strip, not a facing
+      -- set: the stock pose tables would pin it to one frame forever,
+      -- so this draw picks the frame from the caller's flap phase and
+      -- mirrors on a rightward heading
+      if (def.frames or 1) > 1 and renderer.getScreenOrigin then
+        renderer.draw = function(self, px, py, camX, camY, facing,
+                                 walkPhase)
+          local x, y = self:getScreenOrigin(px, py, camX, camY)
+          local image = self.resolveImage and self:resolveImage()
+            or self.image
+          local frame = math.floor(walkPhase or 0) % self.frameCount
+          local quad = self.frames[frame] or self.frames[0]
+          if facing == "right" then
+            love.graphics.draw(image, quad, x + self.frameWidth, y,
+                               0, -1, 1)
+          else
+            love.graphics.draw(image, quad, x, y)
+          end
+        end
+      end
     end
   end
   return mountCache[key] or nil, class

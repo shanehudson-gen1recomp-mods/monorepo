@@ -91,7 +91,9 @@ T.check(not Sky.goldWorld({}), "gen 1 overworld is not gold")
 -- the generic Gen 1 walker sheets and wears the species' colours
 package.loaded["src.render.SpriteRenderer"] = {
   new = function(def, seed)
-    return { def = def, seed = seed,
+    return { def = def, seed = seed, frameCount = def.frames or 1,
+             frameWidth = 16, frames = { [0] = "q0", [1] = "q1" },
+             getScreenOrigin = function() return 0, 0 end,
              setObjPalette = function(self, colors, group)
                self.colors, self.group = colors, group
              end }
@@ -108,8 +110,9 @@ local goldData = {
   pokemon = { HOOTHOOT = { icon = "BIRD" } },
   icons = {},
   sprites = { SPRITE_BIRD = { image = "gen1_bird.png", frames = 6 } },
-  gen2Icons = { species = { HOOTHOOT = 21 },
-                icons = { [21] = { image = "icons/owl.png" } } },
+  gen2Icons = { species = { HOOTHOOT = "ICON_BIRD" },
+                icons = { ICON_BIRD = { image = "icons/owl.png",
+                                        frames = 2 } } },
   gen2Palettes = { tag = "gold-palettes" },
 }
 local owl = Sky.mountSprite(goldData, "HOOTHOOT", "t2")
@@ -118,6 +121,8 @@ T.eq(owl.def.image, "icons/owl.png",
 T.eq(owl.def.species, "HOOTHOOT", "icon def carries its species")
 T.eq(owl.colors and owl.colors[2], "HOOTHOOT",
      "the species' shipped colours are baked in")
+T.eq(owl.def.frames, 2, "the icon's two animation frames carry over")
+T.check(owl.draw ~= nil, "two-frame icons get the flap-phase draw")
 T.check(Sky.mountSprite(goldData, "HOOTHOOT", "t2") == owl,
         "gold icon renderer cached per species")
 local gen1Bird = Sky.mountSprite({
