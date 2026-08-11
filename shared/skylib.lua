@@ -160,14 +160,44 @@ function Sky.mountSprite(data, species, seedPrefix)
   if borrowed then return borrowed, class end
   local spriteId = (class and Sky.MOUNT_SPRITES[class]) or "SPRITE_BIRD"
   local def = data.sprites and data.sprites[spriteId]
+  -- On Gold (probed from the encounter shape, so leftover gen2 tables
+  -- on a Gen 1 boot never trigger this) every species maps to its own
+  -- overworld icon, which beats the generic walker sheets: those are
+  -- Gen 1 art and draw unpaletted grayscale there.  The def shape is
+  -- the one the engine's own day-care mon stands on.
+  if Sky.gen2Encounters(data.encounters) then
+    local icons = data.gen2Icons
+    local iconId = icons and icons.species and icons.species[species]
+    local entry = iconId and icons.icons and icons.icons[iconId]
+    if entry and entry.image then
+      spriteId = "SKY_ICON_" .. tostring(iconId) .. "_" .. tostring(species)
+      def = { id = spriteId, image = entry.image,
+              frames = entry.frames or 1,
+              walker = false, spriteType = "POKEMON_SPRITE",
+              palette = "PAL_OW_RED", paletteId = 0,
+              species = species, icon = iconId }
+    end
+  end
   if not def then return nil, class end
   local key = (seedPrefix or "shared") .. "#" .. spriteId
-  if not mountCache[key] then
+  if mountCache[key] == nil then
     local SpriteRenderer = require("src.render.SpriteRenderer")
-    mountCache[key] = SpriteRenderer.new(def,
+    local okR, renderer = pcall(SpriteRenderer.new, def,
       (seedPrefix or "shared") .. "_" .. spriteId)
+    mountCache[key] = okR and renderer or false
+    -- the species' own shipped colours (its battle-pic pair) make the
+    -- icon read as that species instead of the engine-default red
+    if mountCache[key] and def.icon then
+      pcall(function()
+        local Palettes = require("src.world.gen2.Palettes")
+        local colors = Palettes.monColors(data.gen2Palettes, species)
+        if colors and renderer.setObjPalette then
+          renderer:setObjPalette(colors, "sky:" .. tostring(species))
+        end
+      end)
+    end
   end
-  return mountCache[key], class
+  return mountCache[key] or nil, class
 end
 
 -- dex height -> draw scale: Pidgey reads small, Charizard reads big
@@ -186,12 +216,169 @@ function Sky.hasType(data, species, wanted)
   return false
 end
 
+-- ------- generation-agnostic engine reads
+-- Gold is a second engine, not a skin: the same questions have
+-- different answers there (kind-first encounter tables, no Renderer
+-- singleton, a header byte instead of a tileset list).  Everything in
+-- this section probes the data or object in hand rather than asking
+-- which game is running, so any dataset speaking either shape is
+-- understood.
+
+-- Gold keys wild encounters by kind first (encounters.grass[mapId],
+-- slots split per time of day); Gen 1 by map first
+-- (encounters[mapId].grass.slots)
+function Sky.gen2Encounters(enc)
+  return type(enc) == "table" and type(enc.grass) == "table"
+    and enc.grass.slots == nil and enc.grass.rate == nil
+end
+
+-- Gold's overworld is a World instance; stepBody is the probe the
+-- engine's own compat adapter uses to tell one from a Gen 1
+-- OverworldState
+function Sky.goldWorld(ow)
+  return ow ~= nil and ow.stepBody ~= nil
+end
+
 -- a map's grass encounter slots, or an empty list; the same table the
--- engine rolls classic encounters from
-function Sky.grassSlots(data, mapId)
-  local encDef = data and data.encounters and data.encounters[mapId]
+-- engine rolls classic encounters from.  tod picks the slot table on
+-- datasets that split by time of day (Gold's MORN/DAY/NITE)
+function Sky.grassSlots(data, mapId, tod)
+  local enc = data and data.encounters
+  if not enc then return {} end
+  if Sky.gen2Encounters(enc) then
+    local row = enc.grass[mapId]
+    local slots = row and row.slots
+    if not slots then return {} end
+    return slots[tod] or slots.DAY or {}
+  end
+  local encDef = enc[mapId]
   local slots = encDef and encDef.grass and encDef.grass.slots
   return slots or {}
+end
+
+-- every wild slot table the dataset carries, one row per (map,
+-- terrain, period): { mapId, terrain, period, slots }.  period is nil
+-- where the dataset has no time-of-day split (all of Gen 1, Gold's
+-- water tables)
+function Sky.wildRows(data)
+  local enc = data and data.encounters
+  local rows = {}
+  if type(enc) ~= "table" then return rows end
+  if Sky.gen2Encounters(enc) then
+    for mapId, row in pairs(enc.grass) do
+      for period, slots in pairs(row.slots or {}) do
+        rows[#rows + 1] = { mapId = mapId, terrain = "grass",
+                            period = period, slots = slots }
+      end
+    end
+    for mapId, row in pairs(type(enc.water) == "table" and enc.water
+                            or {}) do
+      if row.slots then
+        rows[#rows + 1] = { mapId = mapId, terrain = "water",
+                            slots = row.slots }
+      end
+    end
+  else
+    for mapId, def in pairs(enc) do
+      for _, terrain in ipairs({ "grass", "water" }) do
+        local t = type(def) == "table" and def[terrain]
+        if t and t.slots then
+          rows[#rows + 1] = { mapId = mapId, terrain = terrain,
+                              slots = t.slots }
+        end
+      end
+    end
+  end
+  return rows
+end
+
+-- does the world host wildlife on this map, and on which terrain;
+-- nil when the map has no wild tables at all
+function Sky.mapWild(data, mapId)
+  local enc = data and data.encounters
+  if type(enc) ~= "table" then return nil end
+  if Sky.gen2Encounters(enc) then
+    local g = enc.grass[mapId]
+    local w = type(enc.water) == "table" and enc.water[mapId] or nil
+    if not (g or w) then return nil end
+    return { grass = g ~= nil, water = w ~= nil }
+  end
+  local def = enc[mapId]
+  if type(def) ~= "table" then return nil end
+  return {
+    grass = (def.grass ~= nil and def.grass.slots ~= nil
+             and #def.grass.slots > 0),
+    water = def.water ~= nil,
+  }
+end
+
+-- the map's own slot levels (grass for the given tod, plus water), so
+-- callers can deal levels off the local curve
+function Sky.slotLevels(data, mapId, tod)
+  local levels = {}
+  local function take(slots)
+    for _, slot in ipairs(slots or {}) do
+      if slot.level then levels[#levels + 1] = slot.level end
+    end
+  end
+  take(Sky.grassSlots(data, mapId, tod))
+  local enc = data and data.encounters
+  if type(enc) == "table" then
+    if Sky.gen2Encounters(enc) then
+      local row = type(enc.water) == "table" and enc.water[mapId] or nil
+      take(row and row.slots)
+    else
+      local def = enc[mapId]
+      take(def and def.water and def.water.slots)
+    end
+  end
+  return levels
+end
+
+-- the visible world area in world pixels.  Gen 1's renderer knows it;
+-- Gold has no Renderer singleton (reading game.renderer there only
+-- puts a warning in the log) and its world carries viewW/viewH
+-- instead, unset until the first frame has drawn.  The GB screen is
+-- the answer before either has spoken.
+function Sky.viewSize(game, ow)
+  if ow and ow.viewW and ow.viewH then return ow.viewW, ow.viewH end
+  if Sky.goldWorld(ow) then return 160, 144 end
+  local r = game and game.renderer
+  if r and r.worldViewSize then return r:worldViewSize() end
+  return 160, 144
+end
+
+-- is there sky over this map?  Gold's headers carry an environment
+-- byte and its Map.isOutside ignores the tileset list; Gen 1 needs
+-- data.field's list, which Gold does not have (and would warn about),
+-- so the list is only fetched where the map record says Gen 1
+function Sky.outsideMap(data, mapDef)
+  if not mapDef then return false end
+  local Map = require("src.world.Map")
+  if mapDef.environment ~= nil then
+    return Map.isOutside(mapDef) == true
+  end
+  local FieldDefaults = require("src.world.FieldDefaults")
+  return Map.isOutside(mapDef,
+    FieldDefaults.field(data, "outsideTilesets")) == true
+end
+
+-- how far the journey has come: Gold keeps a flag set at
+-- save.player.badges, Gen 1 counts the badge items its data lists
+function Sky.badgeCount(data, save)
+  if save and save.player and type(save.player.badges) == "table" then
+    local n = 0
+    for _, has in pairs(save.player.badges) do
+      if has then n = n + 1 end
+    end
+    return n
+  end
+  local n = 0
+  pcall(function()
+    local Badges = require("src.inventory.Badges")
+    n = Badges.count(data, save) or 0
+  end)
+  return n
 end
 
 -- a mon's display name: nickname first, then the species record's
@@ -314,6 +501,41 @@ function Sky.ensureUpdateWrap(OC, tickKey, hooks)
       end)
     end)
   end
+end
+
+-- Gold's world draws its people from world.npcs and never consults
+-- the entity list, so a family mod that renders its own creatures
+-- hangs a tail on World:drawPeople instead.  Same dispatch shape as
+-- ensureUpdateWrap: the wrap installs once per world instance, keys
+-- re-register freely, and a hot reload swaps the implementation
+-- without stacking wraps.
+function Sky.ensureDrawTail(world, key, impl)
+  if not (world and world.drawPeople) then return false end
+  local keys = world.__skyDrawKeys or {}
+  world.__skyDrawKeys = keys
+  local seen = false
+  for _, k in ipairs(keys) do
+    if k == key then seen = true; break end
+  end
+  if not seen then keys[#keys + 1] = key end
+  world[key] = impl
+  if not world.__skyDrawTailWrapped then
+    world.__skyDrawTailWrapped = true
+    local orig = world.drawPeople
+    world.drawPeople = function(self, s, billboard)
+      orig(self, s, billboard)
+      for _, k in ipairs(self.__skyDrawKeys or {}) do
+        local draw = self[k]
+        if draw then
+          local ok, err = pcall(draw, self, s)
+          if not ok then
+            print("[sky] " .. k .. " draw failed: " .. tostring(err))
+          end
+        end
+      end
+    end
+  end
+  return true
 end
 
 return Sky

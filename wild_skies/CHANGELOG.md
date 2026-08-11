@@ -1,14 +1,42 @@
 # Changelog
 
-## Unreleased
+## 1.9.0
 
 - Seam-neighbor skies are pre-populated on the engine's ghost surface and
   retain their displayed positions when promoted to the current map. Each
   connected outdoor map keeps its own bounded resident flock; doors and other
-  full transitions still refresh the population.
+  full transitions still refresh the population. (Gen 1 only for now: Gold
+  has no mod-facing ghost surface, so its seams clear and respawn the sky.)
 - A transport-neutral shared-sky provider API lets session and replay mods
   exchange bounded, revisioned field snapshots and claim encounters without
   coupling Wild Skies to a particular networking implementation.
+- Gen 2 (Gold) support: the manifest declares `games: [gen1, gen2]`,
+  so the mod loads on Gold boots. Everything generation-specific is
+  probed from the data or object in hand, never from a version check:
+  - Gold's kind-first, time-of-day encounter tables feed the sky
+    directly (`encounters.grass[map].slots.NITE`). Night species are
+    derived from the tables themselves, same rule the Crystal 251
+    ecology probe applies, so Hoothoot owns Johto's night without a
+    hand list.
+  - Flyers are drawn through a tail on Gold's `World:drawPeople` (its
+    world never draws the entity list) and dressed in the species'
+    own overworld icon from the imported Gold cache.
+  - View size, outdoors detection and badge count each read the Gold
+    answer where the Gen 1 seam does not exist (`viewW/viewH`, the
+    header's environment byte, `save.player.badges`).
+  - Birds clear at seamless connection crossings on Gold (it fires
+    `map.exited` per seam); the Gen 1 coordinate-rebase carry is
+    unchanged.
+- Shared skylib grows the generation-agnostic readers
+  (`wildRows`, `grassSlots` with a time-of-day, `mapWild`,
+  `slotLevels`, `viewSize`, `outsideMap`, `badgeCount`,
+  `ensureDrawTail`, `goldWorld`) for the rest of the family.
+- Not yet play-tested on a real Gold boot; `modkit gen2check` verdict
+  is "will load but degrade", where the one remaining warning is a
+  Gen 1-only call site Gold never reaches at runtime.
+- On Gold, birds prefer their species' own coloured Gen 2 overworld
+  icon over the generic Gen 1 walker sheets, with the engine's own
+  palette baked in.
 
 ## 1.8.0
 

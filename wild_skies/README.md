@@ -33,6 +33,14 @@ flies alone, is always bold, and never appears over towns, in caves or
 under the forest canopy, so when you do see one it can actually be
 fought and caught.
 
+Wild Skies also loads on Gen 2 (Gold) boots. Johto's skies come from
+Gold's own time-of-day encounter tables, so Hoothoot and friends own
+the night without any hand list, and birds wear their species' own
+overworld icon from your imported Gold cache, coloured with that
+species' shipped palette. Resident seam flocks and shared skies stay
+Gen 1-only for now. Gold support is new and not yet play-tested;
+reports welcome.
+
 ![Demo](https://raw.githubusercontent.com/shanehudson-gen1recomp-mods/monorepo/main/.github/wild_skies-demo.gif)
 
 ## Options

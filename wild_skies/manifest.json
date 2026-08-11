@@ -1,9 +1,10 @@
 {
   "id": "wild_skies",
   "name": "Wild Skies",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "entry": "main.lua",
   "api": 2,
+  "games": ["gen1", "gen2"],
   "category": "MECHANIC",
   "priority": 110,
   "dependencies": [],
