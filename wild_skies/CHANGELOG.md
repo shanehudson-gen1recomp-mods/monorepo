@@ -5,8 +5,8 @@
 - Seam-neighbor skies are pre-populated on the engine's ghost surface and
   retain their displayed positions when promoted to the current map. Each
   connected outdoor map keeps its own bounded resident flock; doors and other
-  full transitions still refresh the population. (Gen 1 only for now: Gold
-  has no mod-facing ghost surface, so its seams clear and respawn the sky.)
+  full transitions still refresh the population. (Gold reaches the same
+  behavior through its own resident-field path; see the Gen 2 bullet.)
 - A transport-neutral shared-sky provider API lets session and replay mods
   exchange bounded, revisioned field snapshots and claim encounters without
   coupling Wild Skies to a particular networking implementation.
@@ -28,9 +28,11 @@
   - View size, outdoors detection and badge count each read the Gold
     answer where the Gen 1 seam does not exist (`viewW/viewH`, the
     header's environment byte, `save.player.badges`).
-  - Birds clear at seamless connection crossings on Gold (it fires
-    `map.exited` per seam); the Gen 1 coordinate-rebase carry is
-    unchanged.
+  - Gold keeps resident flocks across seams too: each connected map's
+    birds tick against a translated stand-in world, show through the
+    seam at their offset, and a connection crossing swaps flocks with
+    positions intact. Doors and other full transitions still refresh
+    the sky.
 - Shared skylib grows the generation-agnostic readers
   (`wildRows`, `grassSlots` with a time-of-day, `mapWild`,
   `slotLevels`, `viewSize`, `outsideMap`, `badgeCount`,

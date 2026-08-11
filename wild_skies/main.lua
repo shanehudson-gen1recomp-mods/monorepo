@@ -1257,6 +1257,89 @@ return function(mod)
     end
   end
 
+  -- ------- Gold resident skies
+  -- Gold has no mod-facing ghost surface, so its neighbor flocks are
+  -- ticked here against a translated stand-in world and drawn by the
+  -- drawPeople tail at the seam offset; a connection crossing then
+  -- swaps flocks instead of clearing, the same continuity the Gen 1
+  -- ghost surface provides.  Gold's neighbor entries carry ids, not
+  -- map instances, so a minimal map wrapper is built off the def.
+  local goldSeamFrom
+
+  local function goldNeighborMap(world, id)
+    local def = world.maps and world.maps[id]
+    if not def then return nil end
+    local MapDef = require("src.world.Map")
+    local w = (def.width or 10) * 2
+    local h = (def.height or 9) * 2
+    return {
+      id = id, def = def, widthCells = w, heightCells = h,
+      inBounds = function(_, x, y)
+        return x >= 0 and y >= 0 and x < w and y < h
+      end,
+      isWalkableCell = function(_, x, y)
+        return MapDef.defIsWalkableCell ~= nil
+          and MapDef.defIsWalkableCell(def, x, y) == true
+      end,
+      isWaterCell = function(_, x, y)
+        return MapDef.defIsWaterCell ~= nil
+          and MapDef.defIsWaterCell(def, x, y) == true
+      end,
+      cellTile = function() return nil end,
+    }
+  end
+
+  local function goldResidentTick(game, ow, dt)
+    local live = { [ow.map.id] = true }
+    for _, nb in ipairs(ow.neighbors or {}) do
+      if nb.id and nb.id ~= ow.map.id then
+        live[nb.id] = true
+        local field = residentFields[nb.id]
+        -- a sky that emptied out reseeds; one that seeded empty (no
+        -- picks) stays cached rather than rescanning every tick
+        if field and field.hadFlyers and #field.flyers == 0 then
+          residentFields[nb.id] = nil
+          field = nil
+        end
+        if not field then
+          local map = goldNeighborMap(ow, nb.id)
+          field = map and seedResidentField(game, ow,
+            { map = map, ox = nb.ox, oy = nb.oy })
+          if field then field.hadFlyers = #field.flyers > 0 end
+        end
+        if field then
+          field.offset = { nb.ox or 0, nb.oy or 0 }
+          local fake = field.standIn
+          if not fake then
+            fake = { map = field.map, entities = {}, npcs = {},
+                     ghosts = {}, neighbors = {}, player = {},
+                     camera = {} }
+            field.standIn = fake
+          end
+          fake.tod = ow.tod
+          fake.viewW, fake.viewH = ow.viewW, ow.viewH
+          fake.camera.x = (ow.camera and ow.camera.x or 0)
+            - field.offset[1]
+          fake.camera.y = (ow.camera and ow.camera.y or 0)
+            - field.offset[2]
+          local p = ow.player
+          fake.player.px = (p.px or p.cellX * 16) - field.offset[1]
+          fake.player.py = (p.py or p.cellY * 16) - field.offset[2]
+          fake.player.cellX = math.floor((fake.player.px + 8) / 16)
+          fake.player.cellY = math.floor((fake.player.py + 8) / 16)
+          for i = #field.flyers, 1, -1 do
+            local f = field.flyers[i]
+            f:tick(fake, dt)
+            if f.dead then table.remove(field.flyers, i) end
+          end
+        end
+      end
+    end
+    for id in pairs(residentFields) do
+      if not live[id] then residentFields[id] = nil end
+    end
+  end
+
   local function faceVelocity(f, vx, vy)
     vx, vy = tonumber(vx) or 0, tonumber(vy) or 0
     if math.abs(vx) + math.abs(vy) < 0.5 then return end
@@ -1688,6 +1771,13 @@ return function(mod)
       return
     end
     local Game = require("src.core.Game")
+    local owNow = Game and Game.overworld
+    if Sky.goldWorld(owNow) and not (sharedProvider or sharedActive) then
+      -- Gold: only map.entered knows whether this was a seam (its via
+      -- says "connection"), so the flock is held for the swap there
+      goldSeamFrom = (owNow.map and owNow.map.id) or true
+      return
+    end
     if sharedProvider or sharedActive then
       clearAll(Game and Game.overworld)
       sharedActive, sharedAuthority, sharedMap = false, false, nil
@@ -1706,10 +1796,39 @@ return function(mod)
     cooldown = 3
   end)
 
-  mod.events:on("map.entered", function()
+  mod.events:on("map.entered", function(ev)
     local Game = require("src.core.Game")
     local ow = Game and Game.overworld
     if not ow then return end
+    if goldSeamFrom ~= nil and Sky.goldWorld(ow) then
+      local from = goldSeamFrom
+      goldSeamFrom = nil
+      if ev and ev.via == "connection" and ow.map then
+        -- seam: park the source flock under its own id and adopt the
+        -- destination's resident one, positions intact
+        if type(from) == "string" and from ~= ow.map.id then
+          local parkedMap = goldNeighborMap(ow, from)
+          if parkedMap then
+            residentFields[from] = { map = parkedMap, flyers = flyers }
+          end
+        end
+        local arriving = residentFields[ow.map.id]
+        residentFields[ow.map.id] = nil
+        flyers = (arriving and arriving.flyers) or {}
+        for _, f in ipairs(flyers) do
+          f.mapW = ((ow.map.widthCells or (ow.map.width or 10) * 2)) * 16
+          f.mapH = ((ow.map.heightCells or (ow.map.height or 9) * 2)) * 16
+          f.cellX = math.floor((f.px + 8) / 16)
+          f.cellY = math.floor((f.py + 8) / 16)
+        end
+        cooldown = math.max(cooldown, 1)
+      else
+        clearAll(ow)
+        residentFields = {}
+        cooldown = 3
+      end
+      return
+    end
     local cached = sharedProvider and ow.map and sharedSnapshots[ow.map.id]
     if cached then
       sharedActive, sharedAuthority = true, cached.localAuthority == true
@@ -1737,15 +1856,30 @@ return function(mod)
       for _, f in ipairs(flyers) do
         if not f.dead then f:draw(cam.x, cam.y) end
       end
+      -- neighbor flocks show through the seam at their offset, the
+      -- same reveal the Gen 1 ghost surface gives
+      for id, field in pairs(residentFields) do
+        local off = field.offset
+        if off and id ~= (world.map and world.map.id) then
+          for _, f in ipairs(field.flyers) do
+            if not f.dead then
+              f:draw(cam.x - off[1], cam.y - off[2])
+            end
+          end
+        end
+      end
       G.pop()
     end
 
     local function skyTick(ow, dt)
       if not (ow and ow.map and ow.player) then return end
+      dt = dt or 1 / 60
       if Sky.goldWorld(ow) then
         Sky.ensureDrawTail(ow, "__wildSkiesDrawFlyers", drawFlyersGold)
+        -- with a session provider, the provider owns composition and
+        -- local seeding would fight its snapshots
+        if not sharedProvider then goldResidentTick(Game, ow, dt) end
       end
-      dt = dt or 1 / 60
       residentGhostDt = dt
       residentGhostClock = residentGhostClock + dt
       if residentGhostClock >= 0.5 then

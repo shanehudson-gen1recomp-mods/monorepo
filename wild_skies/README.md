@@ -37,9 +37,9 @@ Wild Skies also loads on Gen 2 (Gold) boots. Johto's skies come from
 Gold's own time-of-day encounter tables, so Hoothoot and friends own
 the night without any hand list, and birds wear their species' own
 overworld icon from your imported Gold cache, coloured with that
-species' shipped palette. Resident seam flocks and shared skies stay
-Gen 1-only for now. Gold support is new and not yet play-tested;
-reports welcome.
+species' shipped palette. Connected maps keep their resident flocks
+across seams there too; shared skies stay Gen 1-only for now. Gold
+support is new and lightly play-tested; reports welcome.
 
 ![Demo](https://raw.githubusercontent.com/shanehudson-gen1recomp-mods/monorepo/main/.github/wild_skies-demo.gif)
 
