@@ -70,7 +70,13 @@ Sky.SPRITE_SOURCES = {
          or type(waterDef.image) ~= "string" then
         return nil
       end
+      -- carry the sheet geometry through: True Size sheets (WoK 2.x)
+      -- are taller than 16x16 and declare their own frame box and
+      -- anchor; a rebuilt def without them crops to the top-left tile
       return { image = waterDef.image, frames = waterDef.frames or 6,
+               frameWidth = waterDef.frameWidth,
+               frameHeight = waterDef.frameHeight,
+               anchorX = waterDef.anchorX, anchorY = waterDef.anchorY,
                walker = true, trueColor = true, id = waterDef.id }
     end,
   },

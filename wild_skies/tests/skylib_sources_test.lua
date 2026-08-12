@@ -34,11 +34,17 @@ local data = {
   sprites = { SPRITE_BIRD = { image = "generic_bird.png", frames = 6 } },
 }
 
--- an animated levitates def is borrowed, and cached on the second call
-levDef = { image = "lev/017.png", frames = 6, kind = "levitates" }
+-- an animated levitates def is borrowed, and cached on the second call;
+-- True Size sheets carry their own frame box and anchor, which must
+-- ride through or the renderer crops to the top-left 16x16 tile
+levDef = { image = "lev/017.png", frames = 6, kind = "levitates",
+           frameWidth = 24, frameHeight = 32, anchorX = 12, anchorY = 30 }
 local r, class = Sky.mountSprite(data, "PIDGEOTTO", "t")
 T.eq(r.def.image, "lev/017.png", "levitates def borrowed")
 T.eq(class, "BIRD", "icon class still resolved")
+T.eq(r.def.frameWidth, 24, "True Size frame width carries through")
+T.eq(r.def.frameHeight, 32, "True Size frame height carries through")
+T.eq(r.def.anchorY, 30, "True Size anchor carries through")
 T.check(Sky.mountSprite(data, "PIDGEOTTO", "t") == r, "renderer cached")
 
 -- swimming fallthrough and missing art both land on the generic sheet
