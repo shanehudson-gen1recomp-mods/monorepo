@@ -759,6 +759,43 @@ function Sky.ensureUpdateWrap(OC, tickKey, hooks)
   end
 end
 
+-- ------- simulated flight attitude
+-- No era game ships flying poses, so motion carries the illusion:
+-- lean into turns, pitch with climb and dive, pulse with the flap.
+-- Works on any art, portraits included.  The owner updates attitude
+-- in its tick and applies the transform around its draw.
+function Sky.flightAttitude(f, dt)
+  dt = math.max(dt or 1 / 60, 1e-4)
+  local h = f.heading or 0
+  local last = f.__skyLastHeading or h
+  f.__skyLastHeading = h
+  local dh = (h - last + math.pi) % (2 * math.pi) - math.pi
+  local grounded = f.mode == "ground"
+  local targetBank = grounded and 0
+    or math.max(-0.3, math.min(0.3, dh / dt * 0.12))
+  f.__skyBank = (f.__skyBank or 0)
+    + (targetBank - (f.__skyBank or 0)) * math.min(1, dt * 5)
+  local alt = f.alt or 0
+  local lastAlt = f.__skyLastAlt or alt
+  f.__skyLastAlt = alt
+  local targetPitch = grounded and 0
+    or math.max(-0.28, math.min(0.28, (alt - lastAlt) / dt * -0.005))
+  f.__skyPitch = (f.__skyPitch or 0)
+    + (targetPitch - (f.__skyPitch or 0)) * math.min(1, dt * 4)
+end
+
+-- the transform for one draw: the lean and pitch mirror with the
+-- travel direction so the nose leads, and the squash pulses at the
+-- flap rate.  Returns rotation (radians) and a vertical scale.
+function Sky.flightTransform(f)
+  if f.mode == "ground" then return 0, 1 end
+  local dir = f.facing == "left" and -1 or 1
+  local angle = ((f.__skyBank or 0) + (f.__skyPitch or 0)) * dir
+  local squash = 1 - 0.05 * (0.5 + 0.5 * math.sin((f.t or 0)
+    * (f.flap or 6) * math.pi))
+  return angle, squash
+end
+
 -- Gold's world draws its people from world.npcs and never consults
 -- the entity list, so a family mod that renders its own creatures
 -- hangs a tail on World:drawPeople instead.  Same dispatch shape as

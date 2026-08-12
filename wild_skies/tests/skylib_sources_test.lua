@@ -166,6 +166,27 @@ T.eq(Sky.mountSprite(reordered, "PIDGEOTTO", "t11").def.image,
 T.eq(landCalls, 0, "no borrowed resolver runs under a reordered dex")
 T.check(Sky.canonicalDex(data), "the vanilla dex space reads canonical")
 
+-- flight attitude: lean into a turn, pitch into a climb, level out
+-- and stop pulsing on the ground
+local f = { heading = 0, alt = 30, mode = "roam", facing = "right",
+            flap = 6, t = 1 }
+Sky.flightAttitude(f, 1 / 60)
+f.heading = 0.3
+Sky.flightAttitude(f, 1 / 60)
+T.check((f.__skyBank or 0) > 0, "a turn banks the sprite")
+f.alt = 34
+Sky.flightAttitude(f, 1 / 60)
+T.check((f.__skyPitch or 0) < 0, "a climb pitches the nose up")
+local angle, squash = Sky.flightTransform(f)
+T.check(angle ~= 0, "airborne transform carries the attitude")
+T.check(squash > 0.89 and squash <= 1, "the flap pulse stays subtle")
+f.mode = "ground"
+for _ = 1, 120 do Sky.flightAttitude(f, 1 / 60) end
+local gAngle, gSquash = Sky.flightTransform(f)
+T.eq(gAngle, 0, "grounded sprites sit level")
+T.eq(gSquash, 1, "grounded sprites do not pulse")
+T.check(math.abs(f.__skyBank) < 0.01, "the bank decays on the ground")
+
 -- the family's small shared helpers
 T.eq(Sky.monName(data, { nickname = "BUDDY", species = "PIDGEOTTO" }),
   "BUDDY", "nickname wins")

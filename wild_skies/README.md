@@ -51,6 +51,7 @@ support is new and lightly play-tested; reports welcome.
 | BIRD SIZE | NORMAL | SMALL / NORMAL / LARGE / HUGE draw scale on top of dex height |
 | GROUND BATTLES | ON | low birds (perched, landing, flushed) can battle a walking player |
 | SKY ART | AUTO | AUTO keeps bird-shaped species flapping and portraits the rest (Crystal 251's Gen 2 portraits included); PORTRAIT / CLASSIC force one look |
+| FLIGHT MOTION | ON | birds bank into turns, pitch with climbs and dives, and pulse with the flap; pure motion, works on any art |
 
 ## Works well with
 

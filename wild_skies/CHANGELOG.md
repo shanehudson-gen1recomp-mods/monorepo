@@ -29,6 +29,11 @@
     Pidgey reads as a Pidgey rather than a tinted generic bird.
     Sprite packs registered through `registerSpriteSource` still
     outrank all of it, on either generation.
+- FLIGHT MOTION toggle (on by default): simulated flight attitude on
+  every sprite. Birds bank into turns, pitch with climbs and dives,
+  and pulse gently at their flap rate; pure draw-time motion, so
+  portraits, walker sheets and borrowed True Size art all read as
+  flying. Grounded and perched birds sit level.
 - SKY ART option, both generations: no game of this era ships
   flying-pose overworld art, so the sky composes one. AUTO (default)
   keeps bird-shaped species on the flapping walker sheet (in their

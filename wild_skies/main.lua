@@ -40,6 +40,10 @@ return function(mod)
       default = "auto",
       choices = { { "AUTO", "auto" }, { "PORTRAIT", "portrait" },
                   { "CLASSIC", "classic" } } },
+    -- simulated flight attitude: banking into turns, pitching with
+    -- climbs, a flap pulse; pure motion, so it works on any art
+    { key = "motion", label = "FLIGHT MOTION", type = "toggle",
+      default = true },
   })
 
   -- a bird at or below this height can collide with a walking player;
@@ -757,6 +761,7 @@ return function(mod)
 
   function Flyer:tick(ow, dt)
     self.t = self.t + dt
+    Sky.flightAttitude(self, dt)
     local p = ow.player
     -- a bird that cannot battle right now (shy, downtown, or inside the
     -- after-battle rest) never lets the player walk up to it
@@ -969,6 +974,20 @@ return function(mod)
     love.graphics.setColor(1, 1, 1, 1)
     local facing = self.facing or (self.vx < 0 and "left" or "right")
     local sy = math.floor(self.py - lift + 0.5)
+    local angle, squash = 0, 1
+    if mod.options:get("motion") then
+      angle, squash = Sky.flightTransform(self)
+    end
+    local spun = angle ~= 0 or squash ~= 1
+    if spun then
+      local ax = math.floor(self.px + 8 - camX)
+      local ay = math.floor(sy + 8 - camY)
+      love.graphics.push()
+      love.graphics.translate(ax, ay)
+      love.graphics.rotate(angle)
+      love.graphics.scale(1, squash)
+      love.graphics.translate(-ax, -ay)
+    end
     if s ~= 1 then
       local fx = math.floor(self.px + 8 - camX)
       local fy = math.floor(sy + 12 - camY)
@@ -980,6 +999,7 @@ return function(mod)
     self.sprite:draw(math.floor(self.px + 0.5), sy, camX, camY,
                      facing, flapPhase(self), false)
     if s ~= 1 then love.graphics.pop() end
+    if spun then love.graphics.pop() end
   end
 
   -- same pose contract as NPC/Player, so render pipelines (voxel, tilt)
