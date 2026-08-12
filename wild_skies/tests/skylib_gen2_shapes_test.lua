@@ -201,13 +201,27 @@ T.eq(grid[0][0][4], 0, "background white floods to transparent")
 T.eq(grid[3][3][4], 1, "body white survives the flood")
 T.eq(grid[2][2][1], 201 / 255, "shades wear the species' colours")
 
+-- a Gen 1 boot with leftover gen2 tables (Gold played earlier in the
+-- same session) must never take the Gold arm: the encounter shape is
+-- the probe, not the presence of gen2 keys
 local gen1Bird = Sky.mountSprite({
   encounters = gen1.encounters,
-  pokemon = { PIDGEY = { icon = "BIRD" } }, icons = {},
+  pokemon = { PIDGEY = { icon = "BIRD",
+                         spriteFront = "battle/front/pidgey.png",
+                         picSize = 5 } },
+  icons = {},
   sprites = { SPRITE_BIRD = { image = "gen1_bird.png", frames = 6 } },
+  gen2Icons = { species = { PIDGEY = "ICON_BIRD" },
+                icons = { ICON_BIRD = { image = "icons/bird.png",
+                                        frames = 2 } } },
+  gen2Palettes = { tag = "gold-palettes" },
 }, "PIDGEY", "t3")
 T.eq(gen1Bird.def.image, "gen1_bird.png",
-     "gen 1 data keeps the walker sheets")
+     "gen 1 data keeps the walker sheets despite leftover gen2 tables")
+T.check(gen1Bird.colors == nil,
+        "no gold colour bake on a gen 1 boot")
+T.check(gen1Bird.draw == nil,
+        "no gold draw override on a gen 1 boot")
 package.loaded["src.render.SpriteRenderer"] = nil
 package.loaded["src.world.gen2.Palettes"] = nil
 
