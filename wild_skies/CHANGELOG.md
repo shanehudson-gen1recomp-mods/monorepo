@@ -21,10 +21,14 @@
   - Flyers are drawn through a tail on Gold's `World:drawPeople` (its
     world never draws the entity list) and dressed from the imported
     Gold cache: the species' own walker sheet where Gold ships one
-    (Moltres, Ho-Oh, Butterfree and some thirty more), else the sheet
-    its icon assignment names (Hoppip flies as Gold's Oddish walker),
-    else the gold bird, else its two-frame menu icon. Every rung is
-    baked in the species' shipped colours.
+    (Moltres, Ho-Oh, Butterfree and some thirty more), else its own
+    battle front pic drawn overworld-sized (the white background
+    floods to transparency from the border, so body whites survive),
+    else the sheet its icon assignment names, the gold bird, or its
+    menu icon. Every rung wears the species' shipped colours, so a
+    Pidgey reads as a Pidgey rather than a tinted generic bird.
+    Sprite packs registered through `registerSpriteSource` still
+    outrank all of it, on either generation.
   - View size, outdoors detection and badge count each read the Gold
     answer where the Gen 1 seam does not exist (`viewW/viewH`, the
     header's environment byte, `save.player.badges`).

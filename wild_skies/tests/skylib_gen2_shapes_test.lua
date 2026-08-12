@@ -102,7 +102,8 @@ package.loaded["src.render.SpriteRenderer"] = {
 package.loaded["src.world.gen2.Palettes"] = {
   monColors = function(palettes, species)
     T.eq(palettes.tag, "gold-palettes", "palette table passed through")
-    return { "w", species, species, "b" }
+    return { { 255, 255, 255 }, { 201, 80, 80, tag = species },
+             { 90, 40, 40 }, { 0, 0, 0 } }
   end,
 }
 local goldData = {
@@ -129,7 +130,7 @@ local goldData = {
 local moltres = Sky.mountSprite(goldData, "MOLTRES", "t2")
 T.eq(moltres.def.image, "gold_moltres.png",
      "a species' own walker sheet wins")
-T.eq(moltres.colors and moltres.colors[2], "MOLTRES",
+T.eq(moltres.colors and moltres.colors[2].tag, "MOLTRES",
      "shared sheets are baked in the species' shipped colours")
 local hoppip = Sky.mountSprite(goldData, "HOPPIP", "t2")
 T.eq(hoppip.def.image, "gold_oddish.png",
@@ -146,6 +147,58 @@ T.eq(iconOnly.def.image, "icons/bird.png",
      "no walker sheets falls to the two-frame icon strip")
 T.eq(iconOnly.def.frames, 2, "the icon's animation frames carry over")
 T.check(iconOnly.draw ~= nil, "icon strips get the flap-phase draw")
+
+-- gold front pics: no walker sheet resolves the species' own battle
+-- pic, with the white BACKGROUND flooded to transparency from the
+-- border (body whites survive) and the shades wearing the species'
+-- shipped colours
+local savedLove = rawget(_G, "love")
+local grid = {}
+for y = 0, 7 do
+  grid[y] = {}
+  for x = 0, 7 do grid[y][x] = { 1, 1, 1, 1 } end
+end
+for y = 2, 5 do
+  for x = 2, 5 do grid[y][x] = { 0.6, 0.6, 0.6, 1 } end
+end
+grid[3][3] = { 1, 1, 1, 1 } -- an enclosed body white, e.g. a belly
+local fakeId = {
+  getWidth = function() return 8 end,
+  getHeight = function() return 8 end,
+  getPixel = function(_, x, y)
+    local p = grid[y][x]
+    return p[1], p[2], p[3], p[4]
+  end,
+  mapPixel = function(_, fn)
+    for y = 0, 7 do
+      for x = 0, 7 do
+        local p = grid[y][x]
+        p[1], p[2], p[3], p[4] = fn(x, y, p[1], p[2], p[3], p[4])
+      end
+    end
+  end,
+}
+_G.love = {
+  image = { newImageData = function() return fakeId end },
+  graphics = { newImage = function(idata) return { idata = idata } end },
+}
+local picData = {
+  encounters = gold.encounters,
+  pokemon = { PIDGEY = { spriteFront = "battle/front/pidgey.png",
+                         picSize = 1 } },
+  gen2Icons = { species = {}, icons = {} },
+  gen2Palettes = { tag = "gold-palettes" },
+  sprites = {},
+}
+local pic = Sky.mountSprite(picData, "PIDGEY", "t4")
+_G.love = savedLove
+T.check(pic ~= nil and pic.def and pic.def.trueColor == true,
+        "no walker sheet resolves the species' front pic")
+T.check(pic.draw ~= nil, "pics get the overworld-sized draw")
+T.eq(grid[0][0][4], 0, "background white floods to transparent")
+T.eq(grid[3][3][4], 1, "body white survives the flood")
+T.eq(grid[2][2][1], 201 / 255, "shades wear the species' colours")
+
 local gen1Bird = Sky.mountSprite({
   encounters = gen1.encounters,
   pokemon = { PIDGEY = { icon = "BIRD" } }, icons = {},

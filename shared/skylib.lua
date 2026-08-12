@@ -148,6 +148,99 @@ end
 
 local mountCache = {}
 
+-- Gold ships no overworld art for most species (its icon table maps
+-- nearly every flyer to ICON_BIRD), but it ships every species' battle
+-- front pic.  This builds an overworld-sized renderer from that pic:
+-- the white BACKGROUND becomes transparent by border flood (the cart
+-- uses white inside bodies too, so a plain colour key would punch
+-- holes in bellies), and the shades remap to the species' shipped
+-- colour pair.  Returns nil headless or when anything is missing, so
+-- the caller's ladder just falls through.
+local picCache = {}
+
+local function goldPicRenderer(data, species, seedPrefix)
+  local mon = data.pokemon and data.pokemon[species]
+  local path = mon and mon.spriteFront
+  if type(path) ~= "string" then return nil end
+  local key = (seedPrefix or "shared") .. "#pic#" .. tostring(species)
+  if picCache[key] ~= nil then return picCache[key] or nil end
+  picCache[key] = false
+  if not (love and love.image and love.image.newImageData
+          and love.graphics) then
+    return nil
+  end
+  local okD, id = pcall(love.image.newImageData, path)
+  if not (okD and id) then return nil end
+  local w, h = id:getWidth(), id:getHeight()
+  if w < 8 or h < 8 then return nil end
+  local outside, queue = {}, {}
+  local function push(x, y)
+    if x < 0 or y < 0 or x >= w or y >= h then return end
+    local k = y * w + x
+    if outside[k] then return end
+    local r, g, b = id:getPixel(x, y)
+    if r > 0.83 and g > 0.83 and b > 0.83 then
+      outside[k] = true
+      queue[#queue + 1] = x
+      queue[#queue + 1] = y
+    end
+  end
+  for x = 0, w - 1 do push(x, 0); push(x, h - 1) end
+  for y = 0, h - 1 do push(0, y); push(w - 1, y) end
+  local qi = 1
+  while queue[qi] do
+    local x, y = queue[qi], queue[qi + 1]
+    qi = qi + 2
+    push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1)
+  end
+  local colors
+  pcall(function()
+    local Palettes = require("src.world.gen2.Palettes")
+    colors = Palettes.monColors(data.gen2Palettes, species)
+  end)
+  id:mapPixel(function(x, y, r, g, b, a)
+    if outside[y * w + x] then return r, g, b, 0 end
+    if colors then
+      local col = (r > 0.83 and colors[1]) or (r > 0.5 and colors[2])
+        or (r > 0.17 and colors[3]) or colors[4]
+      return col[1] / 255, col[2] / 255, col[3] / 255, a
+    end
+    return r, g, b, a
+  end)
+  local okI, img = pcall(love.graphics.newImage, id)
+  if not okI then return nil end
+  local size = (mon.picSize or 0) * 8
+  if size < 8 then size = h end
+  local def = { id = "SKY_PIC_" .. tostring(species), image = path,
+                frames = 1, walker = false, trueColor = true,
+                frameWidth = size, frameHeight = size,
+                spriteType = "POKEMON_PIC", species = species }
+  local SpriteRenderer = require("src.render.SpriteRenderer")
+  local okR, renderer = pcall(SpriteRenderer.new, def,
+    (seedPrefix or "shared") .. "_pic_" .. tostring(species))
+  if not (okR and renderer) then return nil end
+  renderer.image = img
+  -- overworld-sized: the pic normalises to a 20px creature and the
+  -- flyer's own dex scale rides on top at draw; the odd walk phase
+  -- nudges it a pixel for a wingless hover
+  local k = 20 / size
+  renderer.draw = function(self, px, py, camX, camY, facing, walkPhase)
+    local fx = math.floor(px + 8 - camX)
+    local fy = math.floor(py + 12 - camY)
+      - ((walkPhase == 1) and 1 or 0)
+    local top = fy - self.frameHeight * k
+    if facing == "right" then
+      love.graphics.draw(self.image, self.frames[0],
+        fx + self.frameWidth * k / 2, top, 0, -k, k)
+    else
+      love.graphics.draw(self.image, self.frames[0],
+        fx - self.frameWidth * k / 2, top, 0, k, k)
+    end
+  end
+  picCache[key] = renderer
+  return renderer
+end
+
 -- a cached walker SpriteRenderer for the species, preferring per-species
 -- art borrowed from an enabled sprite mod, then the species' icon class,
 -- falling back to the bird.  Returns renderer, class; renderer is nil
@@ -173,7 +266,15 @@ function Sky.mountSprite(data, species, seedPrefix)
     local sprites = data.sprites or {}
     local icons = data.gen2Icons
     local iconId = icons and icons.species and icons.species[species]
-    local walkerDef = sprites["SPRITE_" .. tostring(species)]
+    -- the species' own art first: a real walker sheet where Gold
+    -- ships one, else its front pic; the icon-derived and generic
+    -- sheets are lookalikes and only dress what the pics cannot
+    local ownDef = sprites["SPRITE_" .. tostring(species)]
+    if not ownDef then
+      local pic = goldPicRenderer(data, species, seedPrefix)
+      if pic then return pic, class end
+    end
+    local walkerDef = ownDef
       or (type(iconId) == "string"
           and sprites[iconId:gsub("^ICON_", "SPRITE_")])
       or sprites.SPRITE_BIRD
