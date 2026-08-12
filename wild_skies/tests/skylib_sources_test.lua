@@ -45,6 +45,7 @@ T.eq(class, "BIRD", "icon class still resolved")
 T.eq(r.def.frameWidth, 24, "True Size frame width carries through")
 T.eq(r.def.frameHeight, 32, "True Size frame height carries through")
 T.eq(r.def.anchorY, 30, "True Size anchor carries through")
+T.check(Sky.trueSized(r), "a sized sheet is recognised as True Size")
 T.check(Sky.mountSprite(data, "PIDGEOTTO", "t") == r, "renderer cached")
 
 -- swimming fallthrough and missing art both land on the generic sheet

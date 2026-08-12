@@ -596,7 +596,9 @@ return function(mod)
     self.level = pick.level or love.math.random(3, 10)
     self.passable = true
     self.bobAmp = profile.bob
-    self.scale = Sky.dexScale(game.data, pick.species)
+    -- a True Size sheet already encodes the species' size
+    self.scale = Sky.trueSized(sprite) and 1
+      or Sky.dexScale(game.data, pick.species)
     -- big wings beat slower: the class rate eased by dex size
     self.flap = profile.flap / math.max(1, self.scale)
     self.speed = love.math.random(profile.speed[1], profile.speed[2])
@@ -1356,7 +1358,8 @@ return function(mod)
     local f = setmetatable({
       id = row.id, sprite = sprite, species = row.species, level = row.level,
       wildSkiesFlyer = true, passable = true, bobAmp = profile.bob,
-      scale = Sky.dexScale(game.data, row.species),
+      scale = Sky.trueSized(sprite) and 1
+        or Sky.dexScale(game.data, row.species),
       flap = profile.flap, bold = row.bold == true,
       px = row.x, py = row.y, alt = row.alt,
       sharedX = row.x, sharedY = row.y, sharedAlt = row.alt,
@@ -1378,7 +1381,8 @@ return function(mod)
     if not sprite then return false end
     f.sprite, f.species, f.level = sprite, row.species, row.level
     f.bobAmp = profile.bob
-    f.scale = Sky.dexScale(game.data, row.species)
+    f.scale = Sky.trueSized(sprite) and 1
+      or Sky.dexScale(game.data, row.species)
     f.flap = profile.flap / math.max(1, f.scale)
     f.speed = math.sqrt((row.vx or 0) ^ 2 + (row.vy or 0) ^ 2)
     if f.speed < 0.5 then
@@ -1759,7 +1763,11 @@ return function(mod)
     local Game = require("src.core.Game")
     for _, f in ipairs(flyers) do
       local sprite = mountFor(Game, f.species)
-      if sprite then f.sprite = sprite end
+      if sprite then
+        f.sprite = sprite
+        f.scale = Sky.trueSized(sprite) and 1
+          or Sky.dexScale(Game.data, f.species)
+      end
     end
   end)
 

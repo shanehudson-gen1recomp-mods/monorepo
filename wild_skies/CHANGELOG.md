@@ -29,6 +29,11 @@
     Pidgey reads as a Pidgey rather than a tinted generic bird.
     Sprite packs registered through `registerSpriteSource` still
     outrank all of it, on either generation.
+- Wilds of Kanto 2.0.0 ready: borrowed sheets keep their True Size
+  frame geometry (a rebuilt def without it crops tall sheets to a
+  16x16 tile), a True Size sheet's own size wins over the dex-height
+  scale so birds are never sized twice, and a live Sprite Style or
+  Pokemon Size flip re-dresses airborne birds at the right scale.
   - View size, outdoors detection and badge count each read the Gold
     answer where the Gen 1 seam does not exist (`viewW/viewH`, the
     header's environment byte, `save.player.badges`).

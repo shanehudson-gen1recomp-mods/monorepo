@@ -346,6 +346,16 @@ function Sky.mountSprite(data, species, seedPrefix)
   return mountCache[key] or nil, class
 end
 
+-- a borrowed walker sheet that declares its own frame geometry (Wilds
+-- of Kanto's True Size) already encodes the species' size; scaling it
+-- again by dex height would double it.  Pic and icon renderers keep
+-- the dex scale: their geometry is a crop box, not a size statement.
+function Sky.trueSized(renderer)
+  local def = renderer and renderer.def
+  if not def or def.walker ~= true then return false end
+  return (def.frameWidth or 16) ~= 16 or (def.frameHeight or 16) ~= 16
+end
+
 -- dex height -> draw scale: Pidgey reads small, Charizard reads big
 function Sky.dexScale(data, species)
   local def = data.pokemon and data.pokemon[species]

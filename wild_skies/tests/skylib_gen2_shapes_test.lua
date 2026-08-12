@@ -195,6 +195,8 @@ _G.love = savedLove
 T.check(pic ~= nil and pic.def and pic.def.trueColor == true,
         "no walker sheet resolves the species' front pic")
 T.check(pic.draw ~= nil, "pics get the overworld-sized draw")
+T.check(not Sky.trueSized(pic),
+        "a pic's crop box is not a True Size statement")
 T.eq(grid[0][0][4], 0, "background white floods to transparent")
 T.eq(grid[3][3][4], 1, "body white survives the flood")
 T.eq(grid[2][2][1], 201 / 255, "shades wear the species' colours")
