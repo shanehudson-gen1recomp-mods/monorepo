@@ -395,6 +395,18 @@ function Sky.goldWorld(ow)
   return ow ~= nil and ow.stepBody ~= nil
 end
 
+-- the LIVE overworld.  On Gold, game.overworld is the adapter's
+-- facade, which forwards a handful of fields but not the World's own
+-- members (stepBody, maps, viewW), so generation probes and neighbor
+-- reads against it silently answer wrong; game.world is the real
+-- instance there.  Gen 1's game.overworld is already the real state.
+function Sky.liveOverworld(game)
+  if not game then return nil end
+  local world = game.world
+  if world ~= nil and world.stepBody ~= nil then return world end
+  return game.overworld
+end
+
 -- a map's grass encounter slots, or an empty list; the same table the
 -- engine rolls classic encounters from.  tod picks the slot table on
 -- datasets that split by time of day (Gold's MORN/DAY/NITE)

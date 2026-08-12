@@ -41,8 +41,26 @@ local ow = {
   player = { cellX = 15, cellY = 15, px = 240, py = 240 },
   map = mkmap("ROUTE_1", defs.ROUTE_1),
 }
+-- Game.overworld is the adapter's FACADE on Gold: it forwards the
+-- live fields but none of the World's own members (no stepBody, no
+-- maps, no viewW).  Modeling that here is what catches generation
+-- probes aimed at the wrong object; the real World hangs off
+-- Game.world, exactly as the adapter serves it.
+local LIVE_FIELD = { map = true, player = true, npcs = true,
+                     entities = true, ghosts = true, camera = true }
+local facade = setmetatable({}, {
+  __index = function(_, key)
+    if LIVE_FIELD[key] then return ow[key] end
+    if key == "isOverworld" then return true end
+    return nil
+  end,
+  __newindex = function(t, key, value)
+    if LIVE_FIELD[key] then ow[key] = value
+    else rawset(t, key, value) end
+  end,
+})
 local Game = {
-  data = Data, overworld = ow, world = ow, save = { party = {} },
+  data = Data, overworld = facade, world = ow, save = { party = {} },
   mods = { exports = {} },
   input = { isDown = function() return false end,
             wasPressed = function() return false end },

@@ -318,7 +318,7 @@ return function(mod)
     if sharedActive then requestSharedContact(f); return nil end
     local Game = require("src.core.Game")
     f.dead = true
-    detach(Game and Game.overworld, f)
+    detach(Sky.liveOverworld(Game), f)
     for i = #flyers, 1, -1 do
       if flyers[i] == f then table.remove(flyers, i) end
     end
@@ -353,7 +353,7 @@ return function(mod)
     if not best then return nil end
     local Game = require("src.core.Game")
     best.dead = true
-    detach(Game and Game.overworld, best)
+    detach(Sky.liveOverworld(Game), best)
     for i = #flyers, 1, -1 do
       if flyers[i] == best then table.remove(flyers, i) end
     end
@@ -420,7 +420,7 @@ return function(mod)
     local enc = next(encDef, ctx)
     if enc and enc.species and not (sharedActive and not sharedAuthority) then
       local Game = require("src.core.Game")
-      local ow = Game and Game.overworld
+      local ow = Sky.liveOverworld(Game)
       local p = ow and ow.player
       if p then
         local pick, pickIndex
@@ -1253,7 +1253,7 @@ return function(mod)
   local function removeFlyer(f)
     local Game = require("src.core.Game")
     f.dead = true
-    detach(Game and Game.overworld, f)
+    detach(Sky.liveOverworld(Game), f)
     for i = #flyers, 1, -1 do
       if flyers[i] == f then table.remove(flyers, i) end
     end
@@ -1461,7 +1461,7 @@ return function(mod)
 
   local function reconcileSharedField(snapshot)
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     local current = ow and ow.map and ow.map.id == snapshot.map
     local field = current and { map = ow.map, flyers = flyers }
       or residentFields[snapshot.map]
@@ -1576,8 +1576,8 @@ return function(mod)
     if not (sharedActive and sharedProvider and f and not pendingSharedClaim)
        or type(sharedProvider.requestClaim) ~= "function" then return false end
     local Game = require("src.core.Game")
-    local mapId = Game and Game.overworld and Game.overworld.map
-      and Game.overworld.map.id
+    local owLive = Sky.liveOverworld(Game)
+    local mapId = owLive and owLive.map and owLive.map.id
     local airborne = false
     local ff = mod.find("free_fly")
     local isFlying = ff and ff.exports and ff.exports.isFlying
@@ -1605,7 +1605,8 @@ return function(mod)
     end
     sharedProviderId, sharedProvider = id, provider
     local Game = require("src.core.Game")
-    if Game and Game.overworld then syncResidentGhosts(Game, Game.overworld) end
+    local owLive = Sky.liveOverworld(Game)
+    if owLive then syncResidentGhosts(Game, owLive) end
     return true
   end
 
@@ -1619,8 +1620,8 @@ return function(mod)
   mod.exports.sharedSkyNeighborMaps = function()
     local Game = require("src.core.Game")
     local out = {}
-    for _, neighbor in ipairs((Game and Game.overworld
-        and Game.overworld.neighbors) or {}) do
+    local owLive = Sky.liveOverworld(Game)
+    for _, neighbor in ipairs((owLive and owLive.neighbors) or {}) do
       if neighbor.map and neighbor.map.id then out[#out + 1] = neighbor.map.id end
     end
     table.sort(out)
@@ -1629,7 +1630,7 @@ return function(mod)
 
   mod.exports.sharedSkyFieldSnapshot = function(mapId)
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if type(mapId) ~= "string" or not (ow and ow.map) then return nil end
     if ow.map.id == mapId then
       local out = snapshotFromFlyers(mapId, flyers, sharedRevision,
@@ -1658,7 +1659,7 @@ return function(mod)
     end
     sharedSnapshots[normalized.map] = normalized
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if ow and ow.map and ow.map.id == normalized.map then
       sharedActive, sharedAuthority = true, normalized.localAuthority
       sharedMap, sharedRevision = normalized.map, normalized.revision
@@ -1729,11 +1730,11 @@ return function(mod)
 
   mod.exports.clearSharedSkyField = function()
     local Game = require("src.core.Game")
-    clearAll(Game and Game.overworld)
+    clearAll(Sky.liveOverworld(Game))
     sharedActive, sharedAuthority, sharedMap = false, false, nil
     sharedRevision, pendingSharedClaim, cooldown = 0, nil, 3
     sharedSnapshots, residentFields, residentGhosts = {}, {}, {}
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if ow then syncResidentGhosts(Game, ow) end
     return true
   end
@@ -1744,7 +1745,7 @@ return function(mod)
   mod.exports.spawnFlyer = function(species, level)
     if sharedActive and not sharedAuthority then return nil, "shared replica" end
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if not (ow and ow.map and ow.player) then return nil, "no overworld" end
     local flyer = Flyer.new(Game, ow, { species = species, level = level })
     if not flyer then
@@ -1779,7 +1780,7 @@ return function(mod)
       return
     end
     local Game = require("src.core.Game")
-    local owNow = Game and Game.overworld
+    local owNow = Sky.liveOverworld(Game)
     if Sky.goldWorld(owNow) and not (sharedProvider or sharedActive) then
       -- Gold: only map.entered knows whether this was a seam (its via
       -- says "connection"), so the flock is held for the swap there
@@ -1787,14 +1788,14 @@ return function(mod)
       return
     end
     if sharedProvider or sharedActive then
-      clearAll(Game and Game.overworld)
+      clearAll(Sky.liveOverworld(Game))
       sharedActive, sharedAuthority, sharedMap = false, false, nil
       sharedRevision, pendingSharedClaim, cooldown = 0, nil, 0
       residentFields, residentGhosts = {}, {}
       return
     end
-    clearAll(Game and Game.overworld)
-    local ow = Game and Game.overworld
+    clearAll(Sky.liveOverworld(Game))
+    local ow = Sky.liveOverworld(Game)
     if ow and ow.ghosts then
       for i = #ow.ghosts, 1, -1 do
         if ow.ghosts[i].wildSkiesResidentGhost then table.remove(ow.ghosts, i) end
@@ -1806,7 +1807,7 @@ return function(mod)
 
   mod.events:on("map.entered", function(ev)
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if not ow then return end
     if goldSeamFrom ~= nil and Sky.goldWorld(ow) then
       local from = goldSeamFrom
@@ -2126,7 +2127,7 @@ return function(mod)
     -- Populate the already-resident view on the first ready frame as well;
     -- the periodic refresh below is for movement and newly loaded neighbors,
     -- not the initial reveal.
-    syncResidentGhosts(Game, Game and Game.overworld)
+    syncResidentGhosts(Game, Sky.liveOverworld(Game))
 
     -- Keep a distinct population for every engine-resident seam map. The
     -- destination flock is already visible through ow.ghosts and becomes the
