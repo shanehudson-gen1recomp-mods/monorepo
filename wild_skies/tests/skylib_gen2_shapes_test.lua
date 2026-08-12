@@ -211,13 +211,38 @@ picData.sprites = { SPRITE_BIRD = { id = "SPRITE_BIRD",
 T.eq(Sky.mountSprite(picData, "SPEAROW", "t5").def.image, "gold_bird.png",
      "AUTO keeps a bird-shaped species flapping")
 T.check(Sky.mountSprite(picData, "SPEAROW", "t6",
-          { goldArt = "portrait" }).draw ~= nil,
+          { skyArt = "portrait" }).draw ~= nil,
         "PORTRAIT forces the front pic on a bird")
 T.check(Sky.mountSprite(picData, "HOPPIP", "t7").draw ~= nil,
         "AUTO gives a non-bird shape its portrait")
 T.eq(Sky.mountSprite(picData, "HOPPIP", "t8",
-       { goldArt = "classic" }).def.image, "gold_bird.png",
+       { skyArt = "classic" }).def.image, "gold_bird.png",
      "CLASSIC forces the walker sheets")
+
+-- the same composition on Gen 1: a non-BIRD class with a front pic
+-- (Crystal 251's extracted portraits, or vanilla's own) wears it
+-- under AUTO, a BIRD class keeps flapping, CLASSIC keeps today's look
+local gen1Pic = {
+  encounters = gen1.encounters,
+  icons = {},
+  pokemon = {
+    SCYTHER = { icon = "MON", spriteFront = "battle/front/scyther.png" },
+    PIDGEY = { icon = "BIRD", spriteFront = "battle/front/pidgey.png" },
+  },
+  sprites = {
+    SPRITE_BIRD = { id = "SPRITE_BIRD", image = "gen1_bird.png",
+                    frames = 6, walker = true },
+    SPRITE_MONSTER = { id = "SPRITE_MONSTER", image = "gen1_mon.png",
+                       frames = 6, walker = true },
+  },
+}
+T.check(Sky.mountSprite(gen1Pic, "SCYTHER", "t12").draw ~= nil,
+        "gen 1 AUTO portraits a non-bird shape")
+T.eq(Sky.mountSprite(gen1Pic, "PIDGEY", "t13").def.image, "gen1_bird.png",
+    "gen 1 AUTO keeps bird classes flapping")
+T.eq(Sky.mountSprite(gen1Pic, "SCYTHER", "t14",
+       { skyArt = "classic" }).def.image, "gen1_mon.png",
+     "gen 1 CLASSIC keeps the class sheets")
 _G.love = savedLove
 T.eq(grid[0][0][4], 0, "background white floods to transparent")
 T.eq(grid[3][3][4], 1, "body white survives the flood")

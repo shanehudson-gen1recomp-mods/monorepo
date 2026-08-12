@@ -50,7 +50,7 @@ support is new and lightly play-tested; reports welcome.
 | SKY DENSITY | MED | LOW / MED / HIGH flyer caps and spawn cooldowns |
 | BIRD SIZE | NORMAL | SMALL / NORMAL / LARGE / HUGE draw scale on top of dex height |
 | GROUND BATTLES | ON | low birds (perched, landing, flushed) can battle a walking player |
-| GOLD BIRD ART | AUTO | Gold only: AUTO keeps bird-shaped species flapping and portraits the rest; PORTRAIT / CLASSIC force one look |
+| SKY ART | AUTO | AUTO keeps bird-shaped species flapping and portraits the rest (Crystal 251's Gen 2 portraits included); PORTRAIT / CLASSIC force one look |
 
 ## Works well with
 

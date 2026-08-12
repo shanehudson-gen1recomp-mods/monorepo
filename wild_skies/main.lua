@@ -31,11 +31,12 @@ return function(mod)
       choices = { { "SMALL", "small" }, { "NORMAL", "normal" },
                   { "LARGE", "large" }, { "HUGE", "huge" } } },
     { key = "bumps", label = "GROUND BATTLES", type = "toggle", default = true },
-    -- Gold only: it ships no flying-pose art, so the sky composes one.
-    -- AUTO keeps bird-shaped species flapping (coloured bird sheet)
-    -- and gives every other shape its species-true battle portrait;
-    -- the other two force one look for everything.
-    { key = "goldart", label = "GOLD BIRD ART", type = "choice",
+    -- no game of this era ships flying-pose overworld art, so the sky
+    -- composes one.  AUTO keeps bird-shaped species flapping (their
+    -- class sheet, coloured on Gold) and gives every other shape its
+    -- species-true battle portrait, Crystal 251's extracted Gen 2
+    -- portraits included; the other two force one look for everything.
+    { key = "skyart", label = "SKY ART", type = "choice",
       default = "auto",
       choices = { { "AUTO", "auto" }, { "PORTRAIT", "portrait" },
                   { "CLASSIC", "classic" } } },
@@ -493,7 +494,7 @@ return function(mod)
 
   local function mountFor(game, species)
     local sprite, class = Sky.mountSprite(game.data, species, "wild_skies",
-      { goldArt = mod.options:get("goldart") })
+      { skyArt = mod.options:get("skyart") })
     return sprite, CLASS_PROFILE[class] or DEFAULT_PROFILE
   end
 
@@ -1770,7 +1771,7 @@ return function(mod)
   -- Sprite Style): live flyers re-dress in the new art immediately
   mod.events:on("mod.options_changed", function(payload)
     local ours = payload ~= nil and payload.mod == mod.id
-      and payload.key == "goldart"
+      and payload.key == "skyart"
     if not (ours or Sky.spriteSourceChanged(payload)) then return end
     local Game = require("src.core.Game")
     for _, f in ipairs(flyers) do

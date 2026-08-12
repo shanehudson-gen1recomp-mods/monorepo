@@ -326,7 +326,7 @@ function Sky.mountSprite(data, species, seedPrefix, opts)
   -- on a Gen 1 boot never trigger it.  Gold ships NO flying-pose art
   -- at all, so the ladder composes the best of what exists: a
   -- species' own walker sheet where Gold has one, then a choice the
-  -- caller can steer with opts.goldArt: "auto" keeps bird-shaped
+  -- caller can steer with opts.skyArt: "auto" keeps bird-shaped
   -- species (ICON_BIRD) on the flapping walker sheet in their own
   -- colours (wings beat a battle pose in the sky) and dresses every
   -- other shape in its species-true front pic; "portrait" prefers
@@ -334,16 +334,16 @@ function Sky.mountSprite(data, species, seedPrefix, opts)
   -- strips are the last resort.  Every sheet rung is baked in the
   -- species' shipped colours.
   local goldColours = false
+  local skyArt = opts and opts.skyArt or "auto"
   if Sky.gen2Encounters(data.encounters) then
     local sprites = data.sprites or {}
     local icons = data.gen2Icons
     local iconId = icons and icons.species and icons.species[species]
-    local goldArt = opts and opts.goldArt or "auto"
     local ownDef = sprites["SPRITE_" .. tostring(species)]
     local preferPic
-    if goldArt == "portrait" then
+    if skyArt == "portrait" then
       preferPic = ownDef == nil
-    elseif goldArt == "classic" then
+    elseif skyArt == "classic" then
       preferPic = false
     else
       preferPic = ownDef == nil and iconId ~= "ICON_BIRD"
@@ -375,6 +375,19 @@ function Sky.mountSprite(data, species, seedPrefix, opts)
                 species = species, icon = iconId }
         goldColours = true
       end
+    end
+  end
+  if not Sky.gen2Encounters(data.encounters) then
+    -- the same composition on Gen 1: species records there carry a
+    -- front pic too (Crystal 251 extracts real Gen 2 portraits for
+    -- its species), so non-bird shapes wear their own portrait
+    -- instead of a generic class sheet.  BIRD-class species keep the
+    -- flapping sheet, and CLASSIC keeps today's look everywhere.
+    local wantPic = skyArt == "portrait"
+      or (skyArt == "auto" and class ~= "BIRD")
+    if skyArt ~= "classic" and (wantPic or def == nil) then
+      local pic = goldPicRenderer(data, species, seedPrefix)
+      if pic then return pic, class end
     end
   end
   if not def then return nil, class end
