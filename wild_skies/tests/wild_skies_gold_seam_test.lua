@@ -90,6 +90,23 @@ local seen = api.flyerAt(15, 15, 99)
 T.check(seen ~= nil and seen.species == "PIDGEY", "the bird reads back")
 T.eq(#ow.entities, 0, "Gold flyers stay out of the entity list")
 
+-- Stadium 2 voxel cast: flyers chain into the bridge's extra-entities
+-- provider without displacing the embedded Wilds' own entities
+local bridge = {}
+bridge.setExtraEntitiesProvider = function(fn)
+  bridge.extraEntitiesProvider = fn
+end
+bridge.setExtraEntitiesProvider(function() return { "wilds_mon" } end)
+Game.mods.exports.STADIUM2_OVERWORLD_MODELS = {
+  voxelPipelineState = bridge,
+}
+OC.__wildSkiesTick(ow, 1 / 60) -- arms the chain
+local cast = bridge.extraEntitiesProvider(ow)
+T.eq(cast[1], "wilds_mon", "the embedded Wilds keep their cast")
+T.check(#cast >= 2, "flyers join the voxel cast")
+T.eq(cast[2].speciesId, "PIDGEY",
+     "flyers carry speciesId for the Stadium models")
+
 -- crossing a seam holds the flock for the swap on map.entered
 run.loader.events:emit("map.exited", { mapId = "ROUTE_1" })
 T.check(api.flyerAt(15, 15, 99) ~= nil,

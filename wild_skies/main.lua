@@ -636,6 +636,8 @@ return function(mod)
     self.wildSkiesFlyer = true
     self.sprite = sprite
     self.species = pick.species
+    -- voxel worlds with per-species models (Stadium 2) read this
+    self.speciesId = pick.species
     self.level = pick.level or love.math.random(3, 10)
     self.passable = true
     self.bobAmp = profile.bob
@@ -1418,7 +1420,8 @@ return function(mod)
     local sprite, profile = mountFor(game, row.species)
     if not sprite then return nil end
     local f = setmetatable({
-      id = row.id, sprite = sprite, species = row.species, level = row.level,
+      id = row.id, sprite = sprite, species = row.species,
+      speciesId = row.species, level = row.level,
       wildSkiesFlyer = true, passable = true, bobAmp = profile.bob,
       scale = Sky.trueSized(sprite) and 1
         or Sky.dexScale(game.data, row.species),
@@ -1442,6 +1445,7 @@ return function(mod)
     local sprite, profile = mountFor(game, row.species)
     if not sprite then return false end
     f.sprite, f.species, f.level = sprite, row.species, row.level
+    f.speciesId = row.species
     f.bobAmp = profile.bob
     f.scale = Sky.trueSized(sprite) and 1
       or Sky.dexScale(game.data, row.species)
@@ -1944,11 +1948,48 @@ return function(mod)
       G.pop()
     end
 
+    -- Stadium 2's Gold voxel worlds never blit the 2D scene, so the
+    -- drawPeople tail is invisible there; the flyers join its cast
+    -- through the bridge's extra-entities provider instead, CHAINED so
+    -- the embedded Wilds keep theirs.  pose() already carries the
+    -- altitude into its scene, and speciesId lets its Stadium models
+    -- dress each bird in real 3D.  The wrap installs once per bridge
+    -- and dispatches through a reassignable impl, so a hot reload
+    -- swaps the flyer list without stacking providers.
+    local function armVoxelCast()
+      local exports = Game.mods and Game.mods.exports
+      local stadium = exports and exports.STADIUM2_OVERWORLD_MODELS
+      local bridge = stadium and stadium.voxelPipelineState
+      if not (bridge and bridge.setExtraEntitiesProvider) then return end
+      if not bridge.__wildSkiesCast then
+        bridge.__wildSkiesCast = true
+        local prev = bridge.extraEntitiesProvider
+        bridge.setExtraEntitiesProvider(function(world)
+          local out = {}
+          if type(prev) == "function" then
+            local ok, extra = pcall(prev, world)
+            if ok and type(extra) == "table" then
+              for _, e in ipairs(extra) do out[#out + 1] = e end
+            end
+          end
+          local impl = bridge.__wildSkiesCastImpl
+          if impl then pcall(impl, out) end
+          return out
+        end)
+      end
+      bridge.__wildSkiesCastImpl = function(out)
+        for _, f in ipairs(flyers) do
+          if not f.dead then out[#out + 1] = f end
+        end
+      end
+    end
+
     local function skyTick(ow, dt)
       if not (ow and ow.map and ow.player) then return end
       dt = dt or 1 / 60
       if Sky.goldWorld(ow) then
         Sky.ensureDrawTail(ow, "__wildSkiesDrawFlyers", drawFlyersGold)
+        armVoxelCast()
         -- with a session provider, the provider owns composition and
         -- local seeding would fight its snapshots
         if not sharedProvider then goldResidentTick(Game, ow, dt) end

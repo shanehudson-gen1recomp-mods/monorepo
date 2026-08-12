@@ -29,6 +29,13 @@
     Pidgey reads as a Pidgey rather than a tinted generic bird.
     Sprite packs registered through `registerSpriteSource` still
     outrank all of it, on either generation.
+- Stadium 2 voxel worlds (STADIUM2_OVERWORLD_MODELS) show the sky:
+  its Gold compositor never blits the 2D scene, so flyers join its
+  voxel cast through the bridge's extra-entities provider, chained so
+  the embedded Wilds keep theirs. Altitude rides the existing pose
+  contract, and each flyer carries speciesId so the Stadium 3D models
+  dress the birds where the player's imported Stadium ROM has them
+  (billboard cards otherwise).
 - Local skies: a town's ambient pool now draws on the species hosted
   within a few seams and doorways of it, walked over the connection
   graph the map data already carries (warps included, so the Safari
