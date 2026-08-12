@@ -117,6 +117,55 @@ T.check(Sky.spriteSourceChanged({ mod = "opt_pack" }),
   "registered source matched by id")
 Sky.unregisterSpriteSource("opt_pack")
 
+-- ------- WoK land sheets, and the dex-reorder guard (their issue #55)
+data.pokemon.FEAROW = { icon = "BIRD", dex = 22 }
+local landCalls = 0
+local landDef
+fakeGame.mods.exports = { overworld_wild_spawns = { render = {
+  waterSpriteRegistry = {
+    isReady = function() return true end,
+    resolve = function() return levDef end,
+  },
+  applyProviderSprite = function(self, entity, game)
+    landCalls = landCalls + 1
+    if not landDef then return false end
+    entity.sprite = { def = landDef }
+    return true
+  end,
+} } }
+
+-- no in-air art: the same HGSS land sheet WoK's own wilds wear
+levDef = nil
+landDef = { image = "hgss/land/022.png", frames = 6, walker = true,
+            trueColor = true, frameWidth = 24, frameHeight = 24 }
+local land = Sky.mountSprite(data, "FEAROW", "t9")
+T.eq(land.def.image, "hgss/land/022.png",
+  "no in-air art borrows the HGSS land sheet")
+T.check(Sky.trueSized(land), "the land sheet's True Size is recognised")
+
+-- in-air art still outranks the land sheet
+levDef = { image = "lev/017b.png", frames = 6, kind = "levitates" }
+landCalls = 0
+T.eq(Sky.mountSprite(data, "PIDGEOTTO", "t10").def.image, "lev/017b.png",
+  "levitates still outranks the land sheet")
+T.eq(landCalls, 0, "the land resolver is not consulted when air art exists")
+
+-- a reordered dex (sprites keyed by dex position land on the wrong
+-- species there) turns dex-keyed borrowing off entirely; the class
+-- sheet is at least the honest silhouette
+local reordered = {
+  icons = {},
+  pokemon = { PIDGEOTTO = { icon = "BIRD", dex = 17 },
+              MEWTWO = { icon = "MON", dex = 248 } },
+  sprites = { SPRITE_BIRD = { image = "generic_bird.png", frames = 6 } },
+}
+T.check(not Sky.canonicalDex(reordered), "a moved sentinel is detected")
+landCalls = 0
+T.eq(Sky.mountSprite(reordered, "PIDGEOTTO", "t11").def.image,
+  "generic_bird.png", "dex-keyed borrowing is off under a reordered dex")
+T.eq(landCalls, 0, "no borrowed resolver runs under a reordered dex")
+T.check(Sky.canonicalDex(data), "the vanilla dex space reads canonical")
+
 -- the family's small shared helpers
 T.eq(Sky.monName(data, { nickname = "BUDDY", species = "PIDGEOTTO" }),
   "BUDDY", "nickname wins")

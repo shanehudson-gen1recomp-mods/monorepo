@@ -61,6 +61,7 @@ Sky.SPRITE_SOURCES = {
     -- registry falls through to swimming art, hence the kind check.
     mod = "overworld_wild_spawns",
     stripWater = true,
+    dexKeyed = true,
     resolve = function(exports, game, species, dex)
       if not dex then return nil end
       local reg = exports.render and exports.render.waterSpriteRegistry
@@ -78,6 +79,34 @@ Sky.SPRITE_SOURCES = {
                frameHeight = waterDef.frameHeight,
                anchorX = waterDef.anchorX, anchorY = waterDef.anchorY,
                walker = true, trueColor = true, id = waterDef.id }
+    end,
+  },
+  { -- Wilds of Kanto's land sheets: the same per-species HGSS art its
+    -- own wilds wear and Dramatic Sky Ride's mounts fly on.  Standing
+    -- poses, so the levitates in-air art above outranks this; every
+    -- creature the sky asks about is airborne anyway, so no further
+    -- gate is needed.  Driving their own bind pipeline with a
+    -- throwaway entity keeps their style routing, palette mode and
+    -- True Size decisions authoritative.
+    mod = "overworld_wild_spawns",
+    id = "overworld_wild_spawns_land",
+    dexKeyed = true,
+    resolve = function(exports, game, species, dex)
+      local render = exports and exports.render
+      if not (render and render.applyProviderSprite) then return nil end
+      local entity = { species = species, enhancedDexId = dex,
+                       id = "sky_borrow_" .. tostring(species),
+                       spawnId = "sky_borrow_" .. tostring(species) }
+      local ok, applied = pcall(render.applyProviderSprite, render,
+                                entity, game)
+      if not (ok and applied and entity.sprite
+              and type(entity.sprite.def) == "table") then
+        return nil
+      end
+      local def = entity.sprite.def
+      if type(def.image) ~= "string" then return nil end
+      -- geometry, trueColor and frames all ride through as theirs
+      return def
     end,
   },
 }
@@ -112,15 +141,48 @@ end
 
 local function animated(def) return def and (def.frames or 1) > 1 end
 
+-- Wilds of Kanto keys its sprite packs by NATIONAL dex position
+-- (their issue #55), so a dataset that reorders the dex would dress
+-- our creatures in the wrong species' art (their example: Mewtwo at a
+-- reordered #248 wearing Tyranitar's sheet).  A few sentinel species
+-- whose canon numbers never move tell us whether this dataset's dex
+-- space is still national; dex-keyed borrowing is skipped when it
+-- is not, and the identity-correct fallbacks (class sheets, Gold's
+-- per-species pics) dress the sky instead.
+local CANON_DEX = { PIKACHU = 25, MEWTWO = 150, CHIKORITA = 152,
+                    HOOTHOOT = 163, HO_OH = 250 }
+local canonCache = setmetatable({}, { __mode = "k" })
+
+function Sky.canonicalDex(data)
+  if not (data and data.pokemon) then return false end
+  local hit = canonCache[data]
+  if hit ~= nil then return hit end
+  local ok = true
+  for species, dex in pairs(CANON_DEX) do
+    local def = data.pokemon[species]
+    if def and def.dex ~= nil and def.dex ~= dex then
+      ok = false
+      break
+    end
+  end
+  canonCache[data] = ok
+  return ok
+end
+
 local sourceCache = {}
 
-local function borrowedSprite(species, dex, seedPrefix)
+local function borrowedSprite(data, species, dex, seedPrefix)
   local okG, Game = pcall(require, "src.core.Game")
   Game = okG and Game or nil
   local exportsById = Game and Game.mods and Game.mods.exports or nil
+  local canon
   for _, source in ipairs(Sky.SPRITE_SOURCES) do
     local exports = source.mod and exportsById and exportsById[source.mod]
       or nil
+    if source.dexKeyed then
+      if canon == nil then canon = Sky.canonicalDex(data) end
+      if not canon then exports = nil end
+    end
     if exports ~= nil or source.mod == nil then
       local ok, def = pcall(source.resolve, exports, Game, species, dex)
       if ok and animated(def) then
@@ -255,7 +317,8 @@ end
 function Sky.mountSprite(data, species, seedPrefix)
   local class = species and Sky.iconClass(data, species) or nil
   local mon = species and data.pokemon and data.pokemon[species]
-  local borrowed = mon and borrowedSprite(species, mon.dex, seedPrefix)
+  local borrowed = mon and borrowedSprite(data, species, mon.dex,
+    seedPrefix)
   if borrowed then return borrowed, class end
   local spriteId = (class and Sky.MOUNT_SPRITES[class]) or "SPRITE_BIRD"
   local def = data.sprites and data.sprites[spriteId]

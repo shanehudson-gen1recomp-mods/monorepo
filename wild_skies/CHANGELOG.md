@@ -29,6 +29,18 @@
     Pidgey reads as a Pidgey rather than a tinted generic bird.
     Sprite packs registered through `registerSpriteSource` still
     outrank all of it, on either generation.
+- Wilds of Kanto's per-species HGSS land sheets now dress birds that
+  have no in-air art (the same sheets its own wilds wear and Dramatic
+  Sky Ride's mounts fly on), resolved through WoK's own bind pipeline
+  so its Sprite Style, palette mode and True Size decisions stay
+  authoritative. The levitates in-air art still outranks it, and
+  registered sprite packs outrank both.
+- Dex-reorder guard (WoK issue #55): their packs are keyed by national
+  dex position, so under a dataset that reorders the dex the borrowed
+  art would belong to the wrong species. Sentinel species whose canon
+  numbers never move detect a reordered dex space, and dex-keyed
+  borrowing switches off there in favour of the identity-correct
+  fallbacks.
 - Wilds of Kanto 2.0.0 ready: borrowed sheets keep their True Size
   frame geometry (a rebuilt def without it crops tall sheets to a
   16x16 tile), a True Size sheet's own size wins over the dex-height
