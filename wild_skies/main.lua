@@ -152,20 +152,43 @@ return function(mod)
            and not FLIGHTLESS[s] then
           local rec = recs[s]
           if not rec then
-            rec = { count = 0, lo = math.huge, hi = 0 }
+            rec = { count = 0, lo = math.huge, hi = 0, byMap = {} }
             recs[s] = rec
             order[#order + 1] = s
           end
           rec.count = rec.count + 1
+          local by = rec.byMap[row.mapId]
+          if not by then
+            by = { count = 0, lo = math.huge, hi = 0 }
+            rec.byMap[row.mapId] = by
+          end
+          by.count = by.count + 1
           if slot.level then
             rec.lo = math.min(rec.lo, slot.level)
             rec.hi = math.max(rec.hi, slot.level)
+            by.lo = math.min(by.lo, slot.level)
+            by.hi = math.max(by.hi, slot.level)
           end
         end
       end
     end
     table.sort(order)
     return recs, order
+  end
+
+  -- how strongly the NEARBY world hosts the species, and at what
+  -- levels; with no locality knowledge the world-wide record answers
+  local function localHosting(rec, near)
+    if not near then return rec.count, rec.lo, rec.hi end
+    local count, lo, hi = 0, math.huge, 0
+    for mapId, by in pairs(rec.byMap) do
+      if near[mapId] then
+        count = count + by.count
+        lo = math.min(lo, by.lo)
+        hi = math.max(hi, by.hi)
+      end
+    end
+    return count, lo, hi
   end
 
   -- night knowledge: a dataset that exports a period-aware ecology
@@ -227,7 +250,12 @@ return function(mod)
 
   -- a curated base pool plus every derived species that belongs in
   -- this air; base membership wins so the hand weighting stays intact
-  local function ambientPool(data, extKey, night, recs, order)
+  -- local skies: a town's ambient pool draws on the species hosted
+  -- within a few seams and doorways of it (`near`), so a
+  -- Safari-exclusive never patrols Pallet while Fuchsia, next door to
+  -- the Safari gate, legitimately gets the odd stray.  With no map
+  -- graph in the data, the pool stays world-wide as before.
+  local function ambientPool(data, extKey, night, recs, order, near)
     local base = extKey == "NITE" and AMBIENT_NITE
       or extKey == "SEA" and AMBIENT_SEA or AMBIENT_DAY
     local pool, inBase = {}, {}
@@ -237,10 +265,11 @@ return function(mod)
     end
     for _, s in ipairs(order) do
       if not inBase[s] then
+        local hosted = localHosting(recs[s], near)
         local bucket = night[s] and "NITE"
           or Sky.hasType(data, s, "WATER") and "SEA" or "DAY"
-        if bucket == extKey then
-          for _ = 1, math.min(recs[s].count, 3) do pool[#pool + 1] = s end
+        if bucket == extKey and hosted > 0 then
+          for _ = 1, math.min(hosted, 3) do pool[#pool + 1] = s end
         end
       end
     end
@@ -1044,13 +1073,16 @@ return function(mod)
         and not wild.grass
       local extKey = tod == "NITE" and "NITE" or sea and "SEA" or "DAY"
       local recs, order = derivedSky(game.data)
-      local pool = ambientPool(game.data, extKey, nocturnal, recs, order)
+      local near = Sky.nearbyMaps(game.data, map.id, 2)
+      local pool = ambientPool(game.data, extKey, nocturnal, recs, order,
+        near)
       for _, species in ipairs(pool) do
         picks[#picks + 1] = { species = species }
       end
       local bands = {}
       for species, rec in pairs(recs) do
-        if rec.lo <= rec.hi then bands[species] = { rec.lo, rec.hi } end
+        local hosted, lo, hi = localHosting(rec, near)
+        if hosted > 0 and lo <= hi then bands[species] = { lo, hi } end
       end
       profile.bands = bands
       local levels = wild
@@ -2040,15 +2072,18 @@ return function(mod)
             and not wild.grass
           local extKey = tod == "NITE" and "NITE" or sea and "SEA" or "DAY"
           local recs, order = derivedSky(Game.data)
-          local pool = ambientPool(Game.data, extKey, nocturnal, recs, order)
+          local near = Sky.nearbyMaps(Game.data, ow.map.id, 2)
+          local pool = ambientPool(Game.data, extKey, nocturnal, recs,
+            order, near)
           for _, species in ipairs(pool) do
             picksCache.picks[#picksCache.picks + 1] = { species = species }
           end
-          -- level bands the world itself taught us, for species the
+          -- level bands the NEARBY world taught us, for species the
           -- hand-tuned AMBIENT_LEVELS table has never heard of
           local bands = {}
           for s, rec in pairs(recs) do
-            if rec.lo <= rec.hi then bands[s] = { rec.lo, rec.hi } end
+            local hosted, lo, hi = localHosting(rec, near)
+            if hosted > 0 and lo <= hi then bands[s] = { lo, hi } end
           end
           picksCache.bands = bands
           -- the map's own slot levels, so ambient birds match the local

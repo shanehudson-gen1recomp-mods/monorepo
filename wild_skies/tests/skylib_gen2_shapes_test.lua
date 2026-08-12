@@ -83,6 +83,30 @@ T.eq(w, 320, "gen 1 renderer consulted")
 w, h = Sky.viewSize(nil, nil)
 T.eq(h, 144, "bare fallback is the GB screen")
 
+-- nearby maps: seams and doorways both count as next door; a def
+-- without a graph answers nil so callers keep world-wide behavior
+local graphData = { maps = {
+  PALLET = { connections = { north = { map = "R1" } },
+             warps = { { destMap = "LAB" } } },
+  R1 = { connections = { south = { map = "PALLET" },
+                         north = { map = "VIRIDIAN" } } },
+  VIRIDIAN = { connections = { south = { map = "R1" } } },
+  LAB = { warps = { { destMap = "PALLET" } } },
+  GOLDY = { connections = { east = { map = 2, mapId = "R29" } } },
+  R29 = {},
+  LONER = {},
+} }
+local near = Sky.nearbyMaps(graphData, "PALLET", 2)
+T.check(near.PALLET and near.R1 and near.LAB, "one hop reaches out")
+T.check(near.VIRIDIAN, "two hops reach the next town")
+T.eq(near.GOLDY, nil, "unconnected maps stay far")
+T.check(Sky.nearbyMaps(graphData, "GOLDY", 1).R29,
+        "gold connections resolve by mapId")
+T.eq(Sky.nearbyMaps(graphData, "LONER", 2), nil,
+     "no graph on the def answers nil")
+T.eq(Sky.nearbyMaps(graphData, "NOWHERE", 2), nil,
+     "unknown map answers nil")
+
 -- gold world probe
 T.check(Sky.goldWorld({ stepBody = function() end }), "world probed by stepBody")
 T.check(not Sky.goldWorld({}), "gen 1 overworld is not gold")

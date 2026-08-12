@@ -591,6 +591,56 @@ function Sky.slotLevels(data, mapId, tod)
   return levels
 end
 
+-- the maps within a few seams and doorways of one map, walked over
+-- the connection graph the defs already carry, warps included so a
+-- gated area (the Safari Zone) counts as next door to its town.
+-- Returns a set of map ids including the start, or nil when the def
+-- carries no graph at all: a dataset without one keeps whatever
+-- world-wide behavior the caller had.
+function Sky.nearbyMaps(data, mapId, hops)
+  local maps = data and data.maps
+  local def = maps and maps[mapId]
+  if not def then return nil end
+  local function links(d)
+    local out = {}
+    for _, c in pairs(d.connections or {}) do
+      local id
+      if type(c) == "table" then
+        id = (type(c.mapId) == "string" and c.mapId)
+          or (type(c.map) == "string" and c.map)
+      elseif type(c) == "string" then
+        id = c
+      end
+      if id then out[#out + 1] = id end
+    end
+    for _, w in ipairs(d.warps or {}) do
+      if type(w) == "table" and type(w.destMap) == "string" then
+        out[#out + 1] = w.destMap
+      end
+    end
+    return out
+  end
+  if #links(def) == 0 then return nil end
+  local near = { [mapId] = true }
+  local frontier = { mapId }
+  for _ = 1, hops or 2 do
+    local grown = {}
+    for _, id in ipairs(frontier) do
+      local d = maps[id]
+      if d then
+        for _, link in ipairs(links(d)) do
+          if not near[link] then
+            near[link] = true
+            grown[#grown + 1] = link
+          end
+        end
+      end
+    end
+    frontier = grown
+  end
+  return near
+end
+
 -- the visible world area in world pixels.  Gen 1's renderer knows it;
 -- Gold has no Renderer singleton (reading game.renderer there only
 -- puts a warning in the log) and its world carries viewW/viewH

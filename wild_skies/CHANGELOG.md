@@ -29,6 +29,12 @@
     Pidgey reads as a Pidgey rather than a tinted generic bird.
     Sprite packs registered through `registerSpriteSource` still
     outrank all of it, on either generation.
+- Local skies: a town's ambient pool now draws on the species hosted
+  within a few seams and doorways of it, walked over the connection
+  graph the map data already carries (warps included, so the Safari
+  Zone counts as next door to Fuchsia). No more Safari-exclusive
+  Scyther over Pallet Town; level bands localize the same way.
+  Datasets without a map graph keep the world-wide pool.
 - FLIGHT MOTION toggle (on by default): simulated flight attitude on
   every sprite. Birds bank into turns, pitch with climbs and dives,
   and pulse gently at their flap rate; pure draw-time motion, so
