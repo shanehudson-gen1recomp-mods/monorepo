@@ -31,6 +31,14 @@ return function(mod)
       choices = { { "SMALL", "small" }, { "NORMAL", "normal" },
                   { "LARGE", "large" }, { "HUGE", "huge" } } },
     { key = "bumps", label = "GROUND BATTLES", type = "toggle", default = true },
+    -- Gold only: it ships no flying-pose art, so the sky composes one.
+    -- AUTO keeps bird-shaped species flapping (coloured bird sheet)
+    -- and gives every other shape its species-true battle portrait;
+    -- the other two force one look for everything.
+    { key = "goldart", label = "GOLD BIRD ART", type = "choice",
+      default = "auto",
+      choices = { { "AUTO", "auto" }, { "PORTRAIT", "portrait" },
+                  { "CLASSIC", "classic" } } },
   })
 
   -- a bird at or below this height can collide with a walking player;
@@ -484,7 +492,8 @@ return function(mod)
   Flyer.__index = Flyer
 
   local function mountFor(game, species)
-    local sprite, class = Sky.mountSprite(game.data, species, "wild_skies")
+    local sprite, class = Sky.mountSprite(game.data, species, "wild_skies",
+      { goldArt = mod.options:get("goldart") })
     return sprite, CLASS_PROFILE[class] or DEFAULT_PROFILE
   end
 
@@ -1760,7 +1769,9 @@ return function(mod)
   -- a sprite-source mod changed its settings (e.g. Wilds of Kanto's
   -- Sprite Style): live flyers re-dress in the new art immediately
   mod.events:on("mod.options_changed", function(payload)
-    if not Sky.spriteSourceChanged(payload) then return end
+    local ours = payload ~= nil and payload.mod == mod.id
+      and payload.key == "goldart"
+    if not (ours or Sky.spriteSourceChanged(payload)) then return end
     local Game = require("src.core.Game")
     for _, f in ipairs(flyers) do
       local sprite = mountFor(Game, f.species)

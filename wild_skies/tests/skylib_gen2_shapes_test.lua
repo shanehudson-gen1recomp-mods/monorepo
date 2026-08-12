@@ -191,12 +191,34 @@ local picData = {
   sprites = {},
 }
 local pic = Sky.mountSprite(picData, "PIDGEY", "t4")
-_G.love = savedLove
 T.check(pic ~= nil and pic.def and pic.def.trueColor == true,
         "no walker sheet resolves the species' front pic")
 T.check(pic.draw ~= nil, "pics get the overworld-sized draw")
 T.check(not Sky.trueSized(pic),
         "a pic's crop box is not a True Size statement")
+
+-- Gold ships no flying-pose art, so AUTO keeps bird-shaped species
+-- (ICON_BIRD) on the flapping walker sheet and gives other shapes
+-- their portrait; PORTRAIT and CLASSIC force one look each
+picData.pokemon.SPEAROW = { spriteFront = "battle/front/spearow.png",
+                            picSize = 1 }
+picData.pokemon.HOPPIP = { spriteFront = "battle/front/hoppip.png",
+                           picSize = 1 }
+picData.gen2Icons.species.SPEAROW = "ICON_BIRD"
+picData.gen2Icons.species.HOPPIP = "ICON_ODDISH"
+picData.sprites = { SPRITE_BIRD = { id = "SPRITE_BIRD",
+  image = "gold_bird.png", frames = 6, walker = true } }
+T.eq(Sky.mountSprite(picData, "SPEAROW", "t5").def.image, "gold_bird.png",
+     "AUTO keeps a bird-shaped species flapping")
+T.check(Sky.mountSprite(picData, "SPEAROW", "t6",
+          { goldArt = "portrait" }).draw ~= nil,
+        "PORTRAIT forces the front pic on a bird")
+T.check(Sky.mountSprite(picData, "HOPPIP", "t7").draw ~= nil,
+        "AUTO gives a non-bird shape its portrait")
+T.eq(Sky.mountSprite(picData, "HOPPIP", "t8",
+       { goldArt = "classic" }).def.image, "gold_bird.png",
+     "CLASSIC forces the walker sheets")
+_G.love = savedLove
 T.eq(grid[0][0][4], 0, "background white floods to transparent")
 T.eq(grid[3][3][4], 1, "body white survives the flood")
 T.eq(grid[2][2][1], 201 / 255, "shades wear the species' colours")

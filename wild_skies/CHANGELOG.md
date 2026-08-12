@@ -29,6 +29,12 @@
     Pidgey reads as a Pidgey rather than a tinted generic bird.
     Sprite packs registered through `registerSpriteSource` still
     outrank all of it, on either generation.
+- GOLD BIRD ART option: Gold ships no flying-pose art at all, so the
+  sky composes one. AUTO (default) keeps bird-shaped species
+  (ICON_BIRD) on the flapping walker sheet in their own colours and
+  gives every other shape its species-true battle portrait; PORTRAIT
+  and CLASSIC force one look for everything. The option re-dresses
+  airborne birds live.
 - Wilds of Kanto's per-species HGSS land sheets now dress birds that
   have no in-air art (the same sheets its own wilds wear and Dramatic
   Sky Ride's mounts fly on), resolved through WoK's own bind pipeline

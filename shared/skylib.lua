@@ -314,7 +314,7 @@ end
 -- falling back to the bird.  Returns renderer, class; renderer is nil
 -- only when even the bird sheet is missing (e.g. the ROM-free fixture
 -- base).
-function Sky.mountSprite(data, species, seedPrefix)
+function Sky.mountSprite(data, species, seedPrefix, opts)
   local class = species and Sky.iconClass(data, species) or nil
   local mon = species and data.pokemon and data.pokemon[species]
   local borrowed = mon and borrowedSprite(data, species, mon.dex,
@@ -323,23 +323,32 @@ function Sky.mountSprite(data, species, seedPrefix)
   local spriteId = (class and Sky.MOUNT_SPRITES[class]) or "SPRITE_BIRD"
   local def = data.sprites and data.sprites[spriteId]
   -- Gold arm, probed from the encounter shape so leftover gen2 tables
-  -- on a Gen 1 boot never trigger it.  Gold's cache ships real walker
-  -- sheets for a few dozen species, so the ladder is: the species'
-  -- own sheet, then the sheet matching its icon assignment
-  -- (ICON_ODDISH -> SPRITE_ODDISH), then the generic bird, and only
-  -- then the flat two-frame icon strip (the day-care mon's def
-  -- shape).  Every rung is baked in the species' shipped colours
-  -- below, so the shared sheets still read per-species.
+  -- on a Gen 1 boot never trigger it.  Gold ships NO flying-pose art
+  -- at all, so the ladder composes the best of what exists: a
+  -- species' own walker sheet where Gold has one, then a choice the
+  -- caller can steer with opts.goldArt: "auto" keeps bird-shaped
+  -- species (ICON_BIRD) on the flapping walker sheet in their own
+  -- colours (wings beat a battle pose in the sky) and dresses every
+  -- other shape in its species-true front pic; "portrait" prefers
+  -- the pic for everything, "classic" the walker sheets.  Icon
+  -- strips are the last resort.  Every sheet rung is baked in the
+  -- species' shipped colours.
   local goldColours = false
   if Sky.gen2Encounters(data.encounters) then
     local sprites = data.sprites or {}
     local icons = data.gen2Icons
     local iconId = icons and icons.species and icons.species[species]
-    -- the species' own art first: a real walker sheet where Gold
-    -- ships one, else its front pic; the icon-derived and generic
-    -- sheets are lookalikes and only dress what the pics cannot
+    local goldArt = opts and opts.goldArt or "auto"
     local ownDef = sprites["SPRITE_" .. tostring(species)]
-    if not ownDef then
+    local preferPic
+    if goldArt == "portrait" then
+      preferPic = ownDef == nil
+    elseif goldArt == "classic" then
+      preferPic = false
+    else
+      preferPic = ownDef == nil and iconId ~= "ICON_BIRD"
+    end
+    if preferPic then
       local pic = goldPicRenderer(data, species, seedPrefix)
       if pic then return pic, class end
     end
@@ -352,6 +361,9 @@ function Sky.mountSprite(data, species, seedPrefix)
       spriteId = (walkerDef.id or "SPRITE_?") .. "_" .. tostring(species)
       goldColours = true
     else
+      local pic = not preferPic
+        and goldPicRenderer(data, species, seedPrefix) or nil
+      if pic then return pic, class end
       local entry = iconId and icons.icons and icons.icons[iconId]
       if entry and entry.image then
         spriteId = "SKY_ICON_" .. tostring(iconId) .. "_"
