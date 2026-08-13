@@ -15,7 +15,8 @@ return {
       "options: altitude, fly speed, air encounters, trainer sight",
     },
     known = {
-      "keeps all outdoor maps resident while installed; fine on desktop, untested on handhelds",
+      "Gen 2 support is new: step reactions (poison, spinners) still act mid-air there, and story gates do not apply",
+      "keeps all outdoor maps resident while installed (Gen 1 only); fine on desktop, untested on handhelds",
       "voxel mode: the rider draws as the full standing figure above the bird, not a seated crop",
       "link play untested while airborne",
     },

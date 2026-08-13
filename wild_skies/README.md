@@ -33,6 +33,14 @@ flies alone, is always bold, and never appears over towns, in caves or
 under the forest canopy, so when you do see one it can actually be
 fought and caught.
 
+Wild Skies also loads on Gen 2 (Gold) boots. Johto's skies come from
+Gold's own time-of-day encounter tables, so Hoothoot and friends own
+the night without any hand list, and birds wear their species' own
+overworld icon from your imported Gold cache, coloured with that
+species' shipped palette. Connected maps keep their resident flocks
+across seams there too; shared skies stay Gen 1-only for now. Gold
+support is new and lightly play-tested; reports welcome.
+
 ![Demo](https://raw.githubusercontent.com/shanehudson-gen1recomp-mods/monorepo/main/.github/wild_skies-demo.gif)
 
 ## Options
@@ -42,6 +50,8 @@ fought and caught.
 | SKY DENSITY | MED | LOW / MED / HIGH flyer caps and spawn cooldowns |
 | BIRD SIZE | NORMAL | SMALL / NORMAL / LARGE / HUGE draw scale on top of dex height |
 | GROUND BATTLES | ON | low birds (perched, landing, flushed) can battle a walking player |
+| SKY ART | AUTO | AUTO keeps bird-shaped species flapping and portraits the rest (Crystal 251's Gen 2 portraits included); PORTRAIT / CLASSIC force one look |
+| FLIGHT MOTION | ON | birds bank into turns, pitch with climbs and dives, and pulse with the flap; pure motion, works on any art |
 
 ## Works well with
 

@@ -7,11 +7,13 @@ return {
     added = {
       "FLYING species from the map's grass slots fly across with a shadow",
       "ambient skies derive from the world's encounter tables, so dataset overhauls (Crystal 251) fill the air with their own species automatically",
+      "loads on Gen 2 (Gold): Johto's per-time-of-day tables feed the sky, birds wear their species' overworld icon",
     },
     known = {
       "icon-only classes (bug/plant/quadruped/snake) ride the bird look",
       "battles only via free_fly's aerial interception",
       "voxel mode shows flyers as billboards with altitude (lightly tested)",
+      "Gen 2 support is new and not yet play-tested on a real Gold boot",
     },
   },
   credits = {},

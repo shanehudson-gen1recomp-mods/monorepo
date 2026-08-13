@@ -1,14 +1,112 @@
 # Changelog
 
-## Unreleased
+## 1.9.0
 
 - Seam-neighbor skies are pre-populated on the engine's ghost surface and
   retain their displayed positions when promoted to the current map. Each
   connected outdoor map keeps its own bounded resident flock; doors and other
-  full transitions still refresh the population.
+  full transitions still refresh the population. (Gold reaches the same
+  behavior through its own resident-field path; see the Gen 2 bullet.)
 - A transport-neutral shared-sky provider API lets session and replay mods
   exchange bounded, revisioned field snapshots and claim encounters without
   coupling Wild Skies to a particular networking implementation.
+- Gen 2 (Gold) support: the manifest declares `games: [gen1, gen2]`,
+  so the mod loads on Gold boots. Everything generation-specific is
+  probed from the data or object in hand, never from a version check:
+  - Gold's kind-first, time-of-day encounter tables feed the sky
+    directly (`encounters.grass[map].slots.NITE`). Night species are
+    derived from the tables themselves, same rule the Crystal 251
+    ecology probe applies, so Hoothoot owns Johto's night without a
+    hand list.
+  - Flyers are drawn through a tail on Gold's `World:drawPeople` (its
+    world never draws the entity list) and dressed from the imported
+    Gold cache: the species' own walker sheet where Gold ships one
+    (Moltres, Ho-Oh, Butterfree and some thirty more), else its own
+    battle front pic drawn overworld-sized (the white background
+    floods to transparency from the border, so body whites survive),
+    else the sheet its icon assignment names, the gold bird, or its
+    menu icon. Every rung wears the species' shipped colours, so a
+    Pidgey reads as a Pidgey rather than a tinted generic bird.
+    Sprite packs registered through `registerSpriteSource` still
+    outrank all of it, on either generation.
+- Voxel integration is capability-based, not id-based: any Gold voxel
+  mod publishing the bridge contract (voxelPipelineState with the
+  extra-entities slot) gets the flyers in its cast, and any mod
+  embedding the Wilds pipeline under exports.wilds.render serves
+  borrowed art, so forks compose the day they release.
+- Gold rooftop perching: with Stadium 2 installed, its shape
+  profile's per-cell structure heights (VoxelScene.groundAt) tell the
+  birds which cells are buildings, the same way the Dramatic Shape
+  profile does on Gen 1, so downtown Johto gets its skyline roosts.
+  The profile's tileset-id spelling is normalized in place exactly
+  the way that mod's own bridge does it, so the two never fight.
+- Stadium 2 voxel worlds (STADIUM2_OVERWORLD_MODELS) show the sky:
+  its Gold compositor never blits the 2D scene, so flyers join its
+  voxel cast through the bridge's extra-entities provider, chained so
+  the embedded Wilds keep theirs. Altitude rides the existing pose
+  contract, and each flyer carries speciesId so the Stadium 3D models
+  dress the birds where the player's imported Stadium ROM has them
+  (billboard cards otherwise).
+- Local skies: a town's ambient pool now draws on the species hosted
+  within a few seams and doorways of it, walked over the connection
+  graph the map data already carries (warps included, so the Safari
+  Zone counts as next door to Fuchsia). No more Safari-exclusive
+  Scyther over Pallet Town; level bands localize the same way.
+  Datasets without a map graph keep the world-wide pool.
+- FLIGHT MOTION toggle (on by default): simulated flight attitude on
+  every sprite. Birds bank into turns, pitch with climbs and dives,
+  and pulse gently at their flap rate; pure draw-time motion, so
+  portraits, walker sheets and borrowed True Size art all read as
+  flying. Grounded and perched birds sit level.
+- SKY ART option, both generations: no game of this era ships
+  flying-pose overworld art, so the sky composes one. AUTO (default)
+  keeps bird-shaped species on the flapping walker sheet (in their
+  shipped colours on Gold) and gives every other shape its
+  species-true battle portrait; on Gen 1 that includes the Gen 2
+  portraits Crystal 251 extracts for its species. PORTRAIT and
+  CLASSIC force one look for everything; CLASSIC is exactly the old
+  Gen 1 appearance. The option re-dresses airborne birds live.
+- Borrowed art fails closed: a def coming back from a sprite
+  provider must name our species (species, padded dex, or id echo in
+  its path) and must not be a fallback placeholder, or the borrow is
+  refused. Older provider builds can answer a failed resolution with
+  another species' sheet, and a wrong-species bird is worse than the
+  generic one.
+- Wilds of Kanto's per-species HGSS land sheets now dress birds that
+  have no in-air art (the same sheets its own wilds wear and Dramatic
+  Sky Ride's mounts fly on), resolved through WoK's own bind pipeline
+  so its Sprite Style, palette mode and True Size decisions stay
+  authoritative. The levitates in-air art still outranks it, and
+  registered sprite packs outrank both.
+- Dex-reorder guard (WoK issue #55): their packs are keyed by national
+  dex position, so under a dataset that reorders the dex the borrowed
+  art would belong to the wrong species. Sentinel species whose canon
+  numbers never move detect a reordered dex space, and dex-keyed
+  borrowing switches off there in favour of the identity-correct
+  fallbacks.
+- Wilds of Kanto 2.0.0 ready: borrowed sheets keep their True Size
+  frame geometry (a rebuilt def without it crops tall sheets to a
+  16x16 tile), a True Size sheet's own size wins over the dex-height
+  scale so birds are never sized twice, and a live Sprite Style or
+  Pokemon Size flip re-dresses airborne birds at the right scale.
+  - View size, outdoors detection and badge count each read the Gold
+    answer where the Gen 1 seam does not exist (`viewW/viewH`, the
+    header's environment byte, `save.player.badges`).
+  - Gold keeps resident flocks across seams too: each connected map's
+    birds tick against a translated stand-in world, show through the
+    seam at their offset, and a connection crossing swaps flocks with
+    positions intact. Doors and other full transitions still refresh
+    the sky.
+- Shared skylib grows the generation-agnostic readers
+  (`wildRows`, `grassSlots` with a time-of-day, `mapWild`,
+  `slotLevels`, `viewSize`, `outsideMap`, `badgeCount`,
+  `ensureDrawTail`, `goldWorld`) for the rest of the family.
+- Not yet play-tested on a real Gold boot; `modkit gen2check` verdict
+  is "will load but degrade", where the one remaining warning is a
+  Gen 1-only call site Gold never reaches at runtime.
+- Flightless FLYING types never join the sky on either generation:
+  the dex has Doduo and Dodrio running and Natu hopping, so they stay
+  on the ground where they belong.
 
 ## 1.8.0
 

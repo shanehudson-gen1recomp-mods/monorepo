@@ -31,6 +31,19 @@ return function(mod)
       choices = { { "SMALL", "small" }, { "NORMAL", "normal" },
                   { "LARGE", "large" }, { "HUGE", "huge" } } },
     { key = "bumps", label = "GROUND BATTLES", type = "toggle", default = true },
+    -- no game of this era ships flying-pose overworld art, so the sky
+    -- composes one.  AUTO keeps bird-shaped species flapping (their
+    -- class sheet, coloured on Gold) and gives every other shape its
+    -- species-true battle portrait, Crystal 251's extracted Gen 2
+    -- portraits included; the other two force one look for everything.
+    { key = "skyart", label = "SKY ART", type = "choice",
+      default = "auto",
+      choices = { { "AUTO", "auto" }, { "PORTRAIT", "portrait" },
+                  { "CLASSIC", "classic" } } },
+    -- simulated flight attitude: banking into turns, pitching with
+    -- climbs, a flap pulse; pure motion, so it works on any art
+    { key = "motion", label = "FLIGHT MOTION", type = "toggle",
+      default = true },
   })
 
   -- a bird at or below this height can collide with a walking player;
@@ -85,6 +98,11 @@ return function(mod)
   local NIGHT_ONLY = { ZUBAT = true, GOLBAT = true, CROBAT = true,
                        HOOTHOOT = true, NOCTOWL = true, MURKROW = true }
 
+  -- FLYING-typed but flightless: the type exists for battle mechanics,
+  -- the sky asks a different question.  The dex has Doduo and Dodrio
+  -- running, and Natu hopping; none of them belongs overhead.
+  local FLIGHTLESS = { DODUO = true, DODRIO = true, NATU = true }
+
   -- the sparse pools for outdoor maps whose slots offer no flyers;
   -- repeats weight the roll.  Open water gets its own pool: Pidgeot
   -- skims the waves hunting Magikarp per its own dex entry, and a
@@ -127,29 +145,50 @@ return function(mod)
   -- slot levels become the species' believable band.
   local function derivedSky(data)
     local recs, order = {}, {}
-    for _, enc in pairs(data.encounters or {}) do
-      for _, terrain in ipairs({ "grass", "water" }) do
-        local slots = enc[terrain] and enc[terrain].slots
-        for _, slot in ipairs(slots or {}) do
-          local s = slot.species
-          if Sky.hasType(data, s, "FLYING") and not ULTRA_SET[s] then
-            local rec = recs[s]
-            if not rec then
-              rec = { count = 0, lo = math.huge, hi = 0 }
-              recs[s] = rec
-              order[#order + 1] = s
-            end
-            rec.count = rec.count + 1
-            if slot.level then
-              rec.lo = math.min(rec.lo, slot.level)
-              rec.hi = math.max(rec.hi, slot.level)
-            end
+    for _, row in ipairs(Sky.wildRows(data)) do
+      for _, slot in ipairs(row.slots) do
+        local s = slot.species
+        if Sky.hasType(data, s, "FLYING") and not ULTRA_SET[s]
+           and not FLIGHTLESS[s] then
+          local rec = recs[s]
+          if not rec then
+            rec = { count = 0, lo = math.huge, hi = 0, byMap = {} }
+            recs[s] = rec
+            order[#order + 1] = s
+          end
+          rec.count = rec.count + 1
+          local by = rec.byMap[row.mapId]
+          if not by then
+            by = { count = 0, lo = math.huge, hi = 0 }
+            rec.byMap[row.mapId] = by
+          end
+          by.count = by.count + 1
+          if slot.level then
+            rec.lo = math.min(rec.lo, slot.level)
+            rec.hi = math.max(rec.hi, slot.level)
+            by.lo = math.min(by.lo, slot.level)
+            by.hi = math.max(by.hi, slot.level)
           end
         end
       end
     end
     table.sort(order)
     return recs, order
+  end
+
+  -- how strongly the NEARBY world hosts the species, and at what
+  -- levels; with no locality knowledge the world-wide record answers
+  local function localHosting(rec, near)
+    if not near then return rec.count, rec.lo, rec.hi end
+    local count, lo, hi = 0, math.huge, 0
+    for mapId, by in pairs(rec.byMap) do
+      if near[mapId] then
+        count = count + by.count
+        lo = math.min(lo, by.lo)
+        hi = math.max(hi, by.hi)
+      end
+    end
+    return count, lo, hi
   end
 
   -- night knowledge: a dataset that exports a period-aware ecology
@@ -162,6 +201,24 @@ return function(mod)
   local function nightSet(game)
     local night = {}
     for s in pairs(NIGHT_ONLY) do night[s] = true end
+    -- a period-aware dataset teaches its own night species without any
+    -- probe: present in a night slot table and absent from every
+    -- morning and day one.  Gold's tables carry periods natively; on
+    -- Gen 1 an ecology export says the same thing through the exports
+    -- scan below.
+    local daylight, dark = {}, {}
+    for _, row in ipairs(Sky.wildRows(game.data)) do
+      for _, slot in ipairs(row.slots) do
+        if row.period == "NITE" then
+          dark[slot.species] = true
+        elseif row.period ~= nil then
+          daylight[slot.species] = true
+        end
+      end
+    end
+    for s in pairs(dark) do
+      if not daylight[s] then night[s] = true end
+    end
     local exports = game.mods and game.mods.exports or {}
     for _, ex in pairs(exports) do
       local eco = type(ex) == "table" and ex.ecology
@@ -193,7 +250,12 @@ return function(mod)
 
   -- a curated base pool plus every derived species that belongs in
   -- this air; base membership wins so the hand weighting stays intact
-  local function ambientPool(data, extKey, night, recs, order)
+  -- local skies: a town's ambient pool draws on the species hosted
+  -- within a few seams and doorways of it (`near`), so a
+  -- Safari-exclusive never patrols Pallet while Fuchsia, next door to
+  -- the Safari gate, legitimately gets the odd stray.  With no map
+  -- graph in the data, the pool stays world-wide as before.
+  local function ambientPool(data, extKey, night, recs, order, near)
     local base = extKey == "NITE" and AMBIENT_NITE
       or extKey == "SEA" and AMBIENT_SEA or AMBIENT_DAY
     local pool, inBase = {}, {}
@@ -203,10 +265,11 @@ return function(mod)
     end
     for _, s in ipairs(order) do
       if not inBase[s] then
+        local hosted = localHosting(recs[s], near)
         local bucket = night[s] and "NITE"
           or Sky.hasType(data, s, "WATER") and "SEA" or "DAY"
-        if bucket == extKey then
-          for _ = 1, math.min(recs[s].count, 3) do pool[#pool + 1] = s end
+        if bucket == extKey and hosted > 0 then
+          for _ = 1, math.min(hosted, 3) do pool[#pool + 1] = s end
         end
       end
     end
@@ -238,6 +301,14 @@ return function(mod)
         if ow.entities[j] == flyer then table.remove(ow.entities, j) end
       end
     end
+  end
+
+  -- the entity list is Gen 1 furniture: Gold's world rebuilds its own
+  -- at will, never draws from it, and would count a low bird as a
+  -- ledge-hop blocker, so flyers there live only in this mod's list
+  -- and the drawPeople tail armed in skyTick
+  local function attach(ow, flyer)
+    if not Sky.goldWorld(ow) then table.insert(ow.entities, flyer) end
   end
 
   local function clearAll(ow)
@@ -289,7 +360,7 @@ return function(mod)
     if sharedActive then requestSharedContact(f); return nil end
     local Game = require("src.core.Game")
     f.dead = true
-    detach(Game and Game.overworld, f)
+    detach(Sky.liveOverworld(Game), f)
     for i = #flyers, 1, -1 do
       if flyers[i] == f then table.remove(flyers, i) end
     end
@@ -324,7 +395,7 @@ return function(mod)
     if not best then return nil end
     local Game = require("src.core.Game")
     best.dead = true
-    detach(Game and Game.overworld, best)
+    detach(Sky.liveOverworld(Game), best)
     for i = #flyers, 1, -1 do
       if flyers[i] == best then table.remove(flyers, i) end
     end
@@ -391,7 +462,7 @@ return function(mod)
     local enc = next(encDef, ctx)
     if enc and enc.species and not (sharedActive and not sharedAuthority) then
       local Game = require("src.core.Game")
-      local ow = Game and Game.overworld
+      local ow = Sky.liveOverworld(Game)
       local p = ow and ow.player
       if p then
         local pick, pickIndex
@@ -434,8 +505,9 @@ return function(mod)
   local function flyingSlots(game, mapId, tod, nocturnal)
     nocturnal = nocturnal or NIGHT_ONLY
     local all, night = {}, {}
-    for _, slot in ipairs(Sky.grassSlots(game.data, mapId)) do
-      if Sky.hasType(game.data, slot.species, "FLYING") then
+    for _, slot in ipairs(Sky.grassSlots(game.data, mapId, tod)) do
+      if Sky.hasType(game.data, slot.species, "FLYING")
+         and not FLIGHTLESS[slot.species] then
         local pick = { species = slot.species, level = slot.level }
         if nocturnal[slot.species] then
           night[#night + 1] = pick
@@ -454,8 +526,69 @@ return function(mod)
   Flyer.__index = Flyer
 
   local function mountFor(game, species)
-    local sprite, class = Sky.mountSprite(game.data, species, "wild_skies")
+    local sprite, class = Sky.mountSprite(game.data, species, "wild_skies",
+      { skyArt = mod.options:get("skyart") })
     return sprite, CLASS_PROFILE[class] or DEFAULT_PROFILE
+  end
+
+  -- Gold roofs come from the same place Gen 1's do, a voxel mod's
+  -- shape profile: Stadium 2's VoxelScene.groundAt answers per-cell
+  -- structure heights, cell conversion and stairs included.  Its
+  -- profile speaks TilesetJohto while the engine map says
+  -- TILESET_JOHTO, so the id is normalized in place the same way (and
+  -- into the same field) the mod's own bridge does, and the two never
+  -- fight over it.  Plain data, so rooftop perching works in flat 2D.
+  local goldGround         -- nil = not tried, false = unavailable
+  local function goldRoofHeightAt(map, cx, cy)
+    if goldGround == nil then
+      goldGround = false
+      local Game = require("src.core.Game")
+      local exports = Game.mods and Game.mods.exports
+      for _, ex in pairs(exports or {}) do
+        local lib = type(ex) == "table" and ex.lib or nil
+        if lib and lib.require then
+          local ok, scene = pcall(lib.require, "VoxelScene")
+          if ok and scene and scene.groundAt then
+            goldGround = {
+              scene = scene,
+              normalize = type(ex.voxelPipelineState) == "table"
+                and ex.voxelPipelineState.profileTilesetId or nil,
+            }
+            break
+          end
+        end
+      end
+      if goldGround == false then
+        mod.log:info("no voxel shape profile exported; Gold birds keep "
+          .. "to street perches (a shape-profile mod like Stadium 2 "
+          .. "must be enabled for rooftops)")
+      else
+        mod.log:info("rooftop perching armed via the voxel shape profile")
+      end
+    end
+    if not goldGround then return nil end
+    local ts = map.tileset
+    if ts and goldGround.normalize
+       and ts._stadiumEngineTilesetId == nil then
+      local ok, mapped = pcall(goldGround.normalize, ts.id)
+      if ok and type(mapped) == "string" and mapped ~= ts.id then
+        ts._stadiumEngineTilesetId = ts.id
+        ts.id = mapped
+      end
+    end
+    local ok, h = pcall(goldGround.scene.groundAt, map, cx, cy)
+    if not ok then
+      -- say it once: a silent nil here made rooftop failures
+      -- indistinguishable from an absent profile in play-testing
+      if not goldGround.warned then
+        goldGround.warned = true
+        mod.log:warn("rooftop probe failed (%s); street perches only",
+          tostring(h))
+      end
+      return nil
+    end
+    if type(h) ~= "number" or h < 16 then return nil end
+    return h
   end
 
   -- the voxel mod's shape profile, when installed, tells us which cells
@@ -463,6 +596,10 @@ return function(mod)
   -- plain data, so rooftop perching works in the flat 2D game too.
   local tileShape          -- nil = not tried, false = unavailable
   local function roofHeightAt(map, cx, cy)
+    -- a Gold map carries cellCollision; Gen 1's never does
+    if map.cellCollision ~= nil then
+      return goldRoofHeightAt(map, cx, cy)
+    end
     if tileShape == nil then
       tileShape = false
       local Game = require("src.core.Game")
@@ -516,7 +653,7 @@ return function(mod)
   -- Returns cell x, cell y, perch height in px (0 on the street).
   local function findPerchCell(ow, game)
     local cam, map, p = ow.camera, ow.map, ow.player
-    local vw, vh = game.renderer:worldViewSize()
+    local vw, vh = Sky.viewSize(game, ow)
     -- downtown birds live on the skyline: in towns they strongly prefer
     -- rooftops, elsewhere it is a coin flip
     local wantRoof = love.math.random()
@@ -524,10 +661,7 @@ return function(mod)
     -- rooftops (and treetops) are an outdoor idea; a cave wall is not
     -- furniture
     if wantRoof then
-      local MapDef = require("src.world.Map")
-      local FieldDefaults = require("src.world.FieldDefaults")
-      wantRoof = map.def ~= nil and MapDef.isOutside(map.def,
-        FieldDefaults.field(game.data, "outsideTilesets")) == true
+      wantRoof = map.def ~= nil and Sky.outsideMap(game.data, map.def)
     end
     -- joining an existing roost beats founding a new one
     if wantRoof then
@@ -566,10 +700,14 @@ return function(mod)
     self.wildSkiesFlyer = true
     self.sprite = sprite
     self.species = pick.species
+    -- voxel worlds with per-species models (Stadium 2) read this
+    self.speciesId = pick.species
     self.level = pick.level or love.math.random(3, 10)
     self.passable = true
     self.bobAmp = profile.bob
-    self.scale = Sky.dexScale(game.data, pick.species)
+    -- a True Size sheet already encodes the species' size
+    self.scale = Sky.trueSized(sprite) and 1
+      or Sky.dexScale(game.data, pick.species)
     -- big wings beat slower: the class rate eased by dex size
     self.flap = profile.flap / math.max(1, self.scale)
     self.speed = love.math.random(profile.speed[1], profile.speed[2])
@@ -578,7 +716,7 @@ return function(mod)
     self.bold = love.math.random() < 0.35
 
     local map, cam, p = ow.map, ow.camera, ow.player
-    local vw, vh = game.renderer:worldViewSize()
+    local vw, vh = Sky.viewSize(game, ow)
     self.mapW = ((map.widthCells or (map.width or 10) * 2)) * 16
     self.mapH = ((map.heightCells or (map.height or 9) * 2)) * 16
 
@@ -707,7 +845,7 @@ return function(mod)
   local function leashHeading(self, ow)
     local Game = require("src.core.Game")
     local cam = ow.camera
-    local vw, vh = Game.renderer:worldViewSize()
+    local vw, vh = Sky.viewSize(Game, ow)
     local cx, cy = cam.x + vw / 2, cam.y + vh / 2
     local dx, dy = cx - self.px, cy - self.py
     if math.abs(dx) > vw / 2 + 64 or math.abs(dy) > vh / 2 + 64 then
@@ -718,6 +856,7 @@ return function(mod)
 
   function Flyer:tick(ow, dt)
     self.t = self.t + dt
+    Sky.flightAttitude(self, dt)
     local p = ow.player
     -- a bird that cannot battle right now (shy, downtown, or inside the
     -- after-battle rest) never lets the player walk up to it
@@ -801,7 +940,7 @@ return function(mod)
       self:step(dt, 1)
       local Game = require("src.core.Game")
       local cam = ow.camera
-      local vw, vh = Game.renderer:worldViewSize()
+      local vw, vh = Sky.viewSize(Game, ow)
       if self.px < cam.x - 48 or self.px > cam.x + vw + 48
          or self.py < cam.y - 48 or self.py > cam.y + vh + 48
          or self.t > (self.leaveBy or math.huge) then
@@ -930,6 +1069,20 @@ return function(mod)
     love.graphics.setColor(1, 1, 1, 1)
     local facing = self.facing or (self.vx < 0 and "left" or "right")
     local sy = math.floor(self.py - lift + 0.5)
+    local angle, squash = 0, 1
+    if mod.options:get("motion") then
+      angle, squash = Sky.flightTransform(self)
+    end
+    local spun = angle ~= 0 or squash ~= 1
+    if spun then
+      local ax = math.floor(self.px + 8 - camX)
+      local ay = math.floor(sy + 8 - camY)
+      love.graphics.push()
+      love.graphics.translate(ax, ay)
+      love.graphics.rotate(angle)
+      love.graphics.scale(1, squash)
+      love.graphics.translate(-ax, -ay)
+    end
     if s ~= 1 then
       local fx = math.floor(self.px + 8 - camX)
       local fy = math.floor(sy + 12 - camY)
@@ -941,6 +1094,7 @@ return function(mod)
     self.sprite:draw(math.floor(self.px + 0.5), sy, camX, camY,
                      facing, flapPhase(self), false)
     if s ~= 1 then love.graphics.pop() end
+    if spun then love.graphics.pop() end
   end
 
   -- same pose contract as NPC/Player, so render pipelines (voxel, tilt)
@@ -964,42 +1118,41 @@ return function(mod)
     if not (game and game.data and map and map.id) then
       return { picks = {}, forest = false, inside = false, peaceful = false }
     end
-    local MapDef = require("src.world.Map")
-    local FieldDefaults = require("src.world.FieldDefaults")
     local def = map.def
-    local forest = def and def.tileset == "FOREST" or false
-    local outside = def and (forest or MapDef.isOutside(def,
-      FieldDefaults.field(game.data, "outsideTilesets"))) or false
+    -- the same generation-agnostic reads the live sky uses: outdoors
+    -- from the map record, wildlife and levels from whichever
+    -- encounter shape the dataset speaks
+    local forest = (def ~= nil and def.tileset == "FOREST")
+      or tostring(map.id):find("_FOREST", 1, true) ~= nil
+    local outside = forest or Sky.outsideMap(game.data, def)
     local effectiveTod = outside and tod or "NITE"
     local nocturnal = nightSet(game)
     local picks = flyingSlots(game, map.id, effectiveTod, nocturnal)
     local town = outside and isTownMap(map.id) or false
-    local encDef = game.data.encounters and game.data.encounters[map.id]
+    local wild = Sky.mapWild(game.data, map.id)
     local profile = {
       picks = picks, forest = forest, inside = not outside,
       peaceful = town, ambient = false, levels = nil, bands = nil,
     }
-    if #picks == 0 and def and outside and (encDef or town) then
-      local sea = not town and encDef and encDef.water ~= nil
-        and not (encDef.grass and encDef.grass.slots
-                 and #encDef.grass.slots > 0)
+    if #picks == 0 and def and outside and (wild or town) then
+      local sea = not town and wild ~= nil and wild.water
+        and not wild.grass
       local extKey = tod == "NITE" and "NITE" or sea and "SEA" or "DAY"
       local recs, order = derivedSky(game.data)
-      local pool = ambientPool(game.data, extKey, nocturnal, recs, order)
+      local near = Sky.nearbyMaps(game.data, map.id, 2)
+      local pool = ambientPool(game.data, extKey, nocturnal, recs, order,
+        near)
       for _, species in ipairs(pool) do
         picks[#picks + 1] = { species = species }
       end
       local bands = {}
       for species, rec in pairs(recs) do
-        if rec.lo <= rec.hi then bands[species] = { rec.lo, rec.hi } end
+        local hosted, lo, hi = localHosting(rec, near)
+        if hosted > 0 and lo <= hi then bands[species] = { lo, hi } end
       end
       profile.bands = bands
-      local levels = {}
-      for _, tbl in ipairs({ encDef and encDef.grass, encDef and encDef.water }) do
-        for _, slot in ipairs((tbl and tbl.slots) or {}) do
-          if slot.level then levels[#levels + 1] = slot.level end
-        end
-      end
+      local levels = wild
+        and Sky.slotLevels(game.data, map.id, effectiveTod) or {}
       profile.levels = levels[1] and levels or nil
       profile.ambient = true
     end
@@ -1012,11 +1165,7 @@ return function(mod)
     if profile.levels then
       base = profile.levels[love.math.random(#profile.levels)]
     else
-      local badges = 0
-      pcall(function()
-        local Badges = require("src.inventory.Badges")
-        badges = Badges.count(game.data, game.save) or 0
-      end)
+      local badges = Sky.badgeCount(game.data, game.save)
       base = love.math.random(3 + badges * 5, 8 + badges * 6)
     end
     local band = AMBIENT_LEVELS[pick.species]
@@ -1128,6 +1277,11 @@ return function(mod)
   local function syncResidentGhosts(game, ow)
     if not (ow and type(ow.neighbors) == "table"
        and type(ow.ghosts) == "table") then return end
+    -- Gold's ghost list is engine-internal: drawPeople draws its
+    -- entries with the (ox, oy, scale) arity and rebuildPeople wipes
+    -- injected rows at will, and its neighbors carry ids rather than
+    -- map instances, so resident skies stay a Gen 1 surface for now
+    if Sky.goldWorld(ow) then return end
     for i = #ow.ghosts, 1, -1 do
       if ow.ghosts[i].wildSkiesResidentGhost then table.remove(ow.ghosts, i) end
     end
@@ -1191,7 +1345,7 @@ return function(mod)
         f.mapH = ((ow.map.heightCells or (ow.map.height or 9) * 2)) * 16
         f.cellX = math.floor((f.px + 8) / 16)
         f.cellY = math.floor((f.py + 8) / 16)
-        ow.entities[#ow.entities + 1] = f
+        attach(ow, f)
       end
     end
     syncResidentGhosts(game, ow)
@@ -1200,6 +1354,9 @@ return function(mod)
 
   local function reconcileFlyerEntities(ow)
     if not (ow and ow.entities) then return end
+    -- flyers stay out of Gold's entity list (it rebuilds at will,
+    -- never draws from it, and counts entities as ledge blockers)
+    if Sky.goldWorld(ow) then return end
     local wanted = {}
     for _, f in ipairs(flyers) do
       if f and not f.dead then wanted[f] = true end
@@ -1224,9 +1381,92 @@ return function(mod)
   local function removeFlyer(f)
     local Game = require("src.core.Game")
     f.dead = true
-    detach(Game and Game.overworld, f)
+    detach(Sky.liveOverworld(Game), f)
     for i = #flyers, 1, -1 do
       if flyers[i] == f then table.remove(flyers, i) end
+    end
+  end
+
+  -- ------- Gold resident skies
+  -- Gold has no mod-facing ghost surface, so its neighbor flocks are
+  -- ticked here against a translated stand-in world and drawn by the
+  -- drawPeople tail at the seam offset; a connection crossing then
+  -- swaps flocks instead of clearing, the same continuity the Gen 1
+  -- ghost surface provides.  Gold's neighbor entries carry ids, not
+  -- map instances, so a minimal map wrapper is built off the def.
+  local goldSeamFrom
+
+  local function goldNeighborMap(world, id)
+    local def = world.maps and world.maps[id]
+    if not def then return nil end
+    local MapDef = require("src.world.Map")
+    local w = (def.width or 10) * 2
+    local h = (def.height or 9) * 2
+    return {
+      id = id, def = def, widthCells = w, heightCells = h,
+      inBounds = function(_, x, y)
+        return x >= 0 and y >= 0 and x < w and y < h
+      end,
+      isWalkableCell = function(_, x, y)
+        return MapDef.defIsWalkableCell ~= nil
+          and MapDef.defIsWalkableCell(def, x, y) == true
+      end,
+      isWaterCell = function(_, x, y)
+        return MapDef.defIsWaterCell ~= nil
+          and MapDef.defIsWaterCell(def, x, y) == true
+      end,
+      cellTile = function() return nil end,
+    }
+  end
+
+  local function goldResidentTick(game, ow, dt)
+    local live = { [ow.map.id] = true }
+    for _, nb in ipairs(ow.neighbors or {}) do
+      if nb.id and nb.id ~= ow.map.id then
+        live[nb.id] = true
+        local field = residentFields[nb.id]
+        -- a sky that emptied out reseeds; one that seeded empty (no
+        -- picks) stays cached rather than rescanning every tick
+        if field and field.hadFlyers and #field.flyers == 0 then
+          residentFields[nb.id] = nil
+          field = nil
+        end
+        if not field then
+          local map = goldNeighborMap(ow, nb.id)
+          field = map and seedResidentField(game, ow,
+            { map = map, ox = nb.ox, oy = nb.oy })
+          if field then field.hadFlyers = #field.flyers > 0 end
+        end
+        if field then
+          field.offset = { nb.ox or 0, nb.oy or 0 }
+          local fake = field.standIn
+          if not fake then
+            fake = { map = field.map, entities = {}, npcs = {},
+                     ghosts = {}, neighbors = {}, player = {},
+                     camera = {} }
+            field.standIn = fake
+          end
+          fake.tod = ow.tod
+          fake.viewW, fake.viewH = ow.viewW, ow.viewH
+          fake.camera.x = (ow.camera and ow.camera.x or 0)
+            - field.offset[1]
+          fake.camera.y = (ow.camera and ow.camera.y or 0)
+            - field.offset[2]
+          local p = ow.player
+          fake.player.px = (p.px or p.cellX * 16) - field.offset[1]
+          fake.player.py = (p.py or p.cellY * 16) - field.offset[2]
+          fake.player.cellX = math.floor((fake.player.px + 8) / 16)
+          fake.player.cellY = math.floor((fake.player.py + 8) / 16)
+          for i = #field.flyers, 1, -1 do
+            local f = field.flyers[i]
+            f:tick(fake, dt)
+            if f.dead then table.remove(field.flyers, i) end
+          end
+        end
+      end
+    end
+    for id in pairs(residentFields) do
+      if not live[id] then residentFields[id] = nil end
     end
   end
 
@@ -1244,9 +1484,11 @@ return function(mod)
     local sprite, profile = mountFor(game, row.species)
     if not sprite then return nil end
     local f = setmetatable({
-      id = row.id, sprite = sprite, species = row.species, level = row.level,
+      id = row.id, sprite = sprite, species = row.species,
+      speciesId = row.species, level = row.level,
       wildSkiesFlyer = true, passable = true, bobAmp = profile.bob,
-      scale = Sky.dexScale(game.data, row.species),
+      scale = Sky.trueSized(sprite) and 1
+        or Sky.dexScale(game.data, row.species),
       flap = profile.flap, bold = row.bold == true,
       px = row.x, py = row.y, alt = row.alt,
       sharedX = row.x, sharedY = row.y, sharedAlt = row.alt,
@@ -1267,8 +1509,10 @@ return function(mod)
     local sprite, profile = mountFor(game, row.species)
     if not sprite then return false end
     f.sprite, f.species, f.level = sprite, row.species, row.level
+    f.speciesId = row.species
     f.bobAmp = profile.bob
-    f.scale = Sky.dexScale(game.data, row.species)
+    f.scale = Sky.trueSized(sprite) and 1
+      or Sky.dexScale(game.data, row.species)
     f.flap = profile.flap / math.max(1, f.scale)
     f.speed = math.sqrt((row.vx or 0) ^ 2 + (row.vy or 0) ^ 2)
     if f.speed < 0.5 then
@@ -1347,7 +1591,7 @@ return function(mod)
 
   local function reconcileSharedField(snapshot)
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     local current = ow and ow.map and ow.map.id == snapshot.map
     local field = current and { map = ow.map, flyers = flyers }
       or residentFields[snapshot.map]
@@ -1462,8 +1706,8 @@ return function(mod)
     if not (sharedActive and sharedProvider and f and not pendingSharedClaim)
        or type(sharedProvider.requestClaim) ~= "function" then return false end
     local Game = require("src.core.Game")
-    local mapId = Game and Game.overworld and Game.overworld.map
-      and Game.overworld.map.id
+    local owLive = Sky.liveOverworld(Game)
+    local mapId = owLive and owLive.map and owLive.map.id
     local airborne = false
     local ff = mod.find("free_fly")
     local isFlying = ff and ff.exports and ff.exports.isFlying
@@ -1491,7 +1735,8 @@ return function(mod)
     end
     sharedProviderId, sharedProvider = id, provider
     local Game = require("src.core.Game")
-    if Game and Game.overworld then syncResidentGhosts(Game, Game.overworld) end
+    local owLive = Sky.liveOverworld(Game)
+    if owLive then syncResidentGhosts(Game, owLive) end
     return true
   end
 
@@ -1505,8 +1750,8 @@ return function(mod)
   mod.exports.sharedSkyNeighborMaps = function()
     local Game = require("src.core.Game")
     local out = {}
-    for _, neighbor in ipairs((Game and Game.overworld
-        and Game.overworld.neighbors) or {}) do
+    local owLive = Sky.liveOverworld(Game)
+    for _, neighbor in ipairs((owLive and owLive.neighbors) or {}) do
       if neighbor.map and neighbor.map.id then out[#out + 1] = neighbor.map.id end
     end
     table.sort(out)
@@ -1515,7 +1760,7 @@ return function(mod)
 
   mod.exports.sharedSkyFieldSnapshot = function(mapId)
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if type(mapId) ~= "string" or not (ow and ow.map) then return nil end
     if ow.map.id == mapId then
       local out = snapshotFromFlyers(mapId, flyers, sharedRevision,
@@ -1544,7 +1789,7 @@ return function(mod)
     end
     sharedSnapshots[normalized.map] = normalized
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if ow and ow.map and ow.map.id == normalized.map then
       sharedActive, sharedAuthority = true, normalized.localAuthority
       sharedMap, sharedRevision = normalized.map, normalized.revision
@@ -1615,11 +1860,11 @@ return function(mod)
 
   mod.exports.clearSharedSkyField = function()
     local Game = require("src.core.Game")
-    clearAll(Game and Game.overworld)
+    clearAll(Sky.liveOverworld(Game))
     sharedActive, sharedAuthority, sharedMap = false, false, nil
     sharedRevision, pendingSharedClaim, cooldown = 0, nil, 3
     sharedSnapshots, residentFields, residentGhosts = {}, {}, {}
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if ow then syncResidentGhosts(Game, ow) end
     return true
   end
@@ -1630,7 +1875,7 @@ return function(mod)
   mod.exports.spawnFlyer = function(species, level)
     if sharedActive and not sharedAuthority then return nil, "shared replica" end
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if not (ow and ow.map and ow.player) then return nil, "no overworld" end
     local flyer = Flyer.new(Game, ow, { species = species, level = level })
     if not flyer then
@@ -1638,18 +1883,24 @@ return function(mod)
     end
     flyer.bold = true -- an explicitly requested bird is always touchable
     flyers[#flyers + 1] = flyer
-    table.insert(ow.entities, flyer)
+    attach(ow, flyer)
     return flyer.id
   end
 
   -- a sprite-source mod changed its settings (e.g. Wilds of Kanto's
   -- Sprite Style): live flyers re-dress in the new art immediately
   mod.events:on("mod.options_changed", function(payload)
-    if not Sky.spriteSourceChanged(payload) then return end
+    local ours = payload ~= nil and payload.mod == mod.id
+      and payload.key == "skyart"
+    if not (ours or Sky.spriteSourceChanged(payload)) then return end
     local Game = require("src.core.Game")
     for _, f in ipairs(flyers) do
       local sprite = mountFor(Game, f.species)
-      if sprite then f.sprite = sprite end
+      if sprite then
+        f.sprite = sprite
+        f.scale = Sky.trueSized(sprite) and 1
+          or Sky.dexScale(Game.data, f.species)
+      end
     end
   end)
 
@@ -1661,15 +1912,22 @@ return function(mod)
       return
     end
     local Game = require("src.core.Game")
+    local owNow = Sky.liveOverworld(Game)
+    if Sky.goldWorld(owNow) and not (sharedProvider or sharedActive) then
+      -- Gold: only map.entered knows whether this was a seam (its via
+      -- says "connection"), so the flock is held for the swap there
+      goldSeamFrom = (owNow.map and owNow.map.id) or true
+      return
+    end
     if sharedProvider or sharedActive then
-      clearAll(Game and Game.overworld)
+      clearAll(Sky.liveOverworld(Game))
       sharedActive, sharedAuthority, sharedMap = false, false, nil
       sharedRevision, pendingSharedClaim, cooldown = 0, nil, 0
       residentFields, residentGhosts = {}, {}
       return
     end
-    clearAll(Game and Game.overworld)
-    local ow = Game and Game.overworld
+    clearAll(Sky.liveOverworld(Game))
+    local ow = Sky.liveOverworld(Game)
     if ow and ow.ghosts then
       for i = #ow.ghosts, 1, -1 do
         if ow.ghosts[i].wildSkiesResidentGhost then table.remove(ow.ghosts, i) end
@@ -1679,10 +1937,39 @@ return function(mod)
     cooldown = 3
   end)
 
-  mod.events:on("map.entered", function()
+  mod.events:on("map.entered", function(ev)
     local Game = require("src.core.Game")
-    local ow = Game and Game.overworld
+    local ow = Sky.liveOverworld(Game)
     if not ow then return end
+    if goldSeamFrom ~= nil and Sky.goldWorld(ow) then
+      local from = goldSeamFrom
+      goldSeamFrom = nil
+      if ev and ev.via == "connection" and ow.map then
+        -- seam: park the source flock under its own id and adopt the
+        -- destination's resident one, positions intact
+        if type(from) == "string" and from ~= ow.map.id then
+          local parkedMap = goldNeighborMap(ow, from)
+          if parkedMap then
+            residentFields[from] = { map = parkedMap, flyers = flyers }
+          end
+        end
+        local arriving = residentFields[ow.map.id]
+        residentFields[ow.map.id] = nil
+        flyers = (arriving and arriving.flyers) or {}
+        for _, f in ipairs(flyers) do
+          f.mapW = ((ow.map.widthCells or (ow.map.width or 10) * 2)) * 16
+          f.mapH = ((ow.map.heightCells or (ow.map.height or 9) * 2)) * 16
+          f.cellX = math.floor((f.px + 8) / 16)
+          f.cellY = math.floor((f.py + 8) / 16)
+        end
+        cooldown = math.max(cooldown, 1)
+      else
+        clearAll(ow)
+        residentFields = {}
+        cooldown = 3
+      end
+      return
+    end
     local cached = sharedProvider and ow.map and sharedSnapshots[ow.map.id]
     if cached then
       sharedActive, sharedAuthority = true, cached.localAuthority == true
@@ -1696,14 +1983,89 @@ return function(mod)
   mod.events:on("game.ready", function()
     local Game = require("src.core.Game")
     local OC = require("src.world.OverworldController")
-    local MapDef = require("src.world.Map")
-    local FieldDefaults = require("src.world.FieldDefaults")
 
     local bumpCooldown = 0
+
+    -- Gold draws its people from world.npcs and never the entity list,
+    -- so the flyers ride a tail on drawPeople; one scaled transform
+    -- lets the Gen 1 draw path work unchanged
+    local function drawFlyersGold(world, s)
+      local cam = world.camera
+      local G = love.graphics
+      G.push("all")
+      G.scale(s or 1, s or 1)
+      for _, f in ipairs(flyers) do
+        if not f.dead then f:draw(cam.x, cam.y) end
+      end
+      -- neighbor flocks show through the seam at their offset, the
+      -- same reveal the Gen 1 ghost surface gives
+      for id, field in pairs(residentFields) do
+        local off = field.offset
+        if off and id ~= (world.map and world.map.id) then
+          for _, f in ipairs(field.flyers) do
+            if not f.dead then
+              f:draw(cam.x - off[1], cam.y - off[2])
+            end
+          end
+        end
+      end
+      G.pop()
+    end
+
+    -- Stadium 2's Gold voxel worlds never blit the 2D scene, so the
+    -- drawPeople tail is invisible there; the flyers join its cast
+    -- through the bridge's extra-entities provider instead, CHAINED so
+    -- the embedded Wilds keep theirs.  pose() already carries the
+    -- altitude into its scene, and speciesId lets its Stadium models
+    -- dress each bird in real 3D.  The wrap installs once per bridge
+    -- and dispatches through a reassignable impl, so a hot reload
+    -- swaps the flyer list without stacking providers.
+    local function armVoxelCast()
+      local exports = Game.mods and Game.mods.exports
+      if not exports then return end
+      -- capability, not id: any Gold voxel mod publishing the bridge
+      -- contract (a voxelPipelineState with an extra-entities slot)
+      -- gets the flyers, today's Stadium 2 and tomorrow's forks alike
+      for _, ex in pairs(exports) do
+        local bridge = type(ex) == "table" and ex.voxelPipelineState
+          or nil
+        if type(bridge) == "table"
+           and type(bridge.setExtraEntitiesProvider) == "function" then
+          if not bridge.__wildSkiesCast then
+            bridge.__wildSkiesCast = true
+            local prev = bridge.extraEntitiesProvider
+            bridge.setExtraEntitiesProvider(function(world)
+              local out = {}
+              if type(prev) == "function" then
+                local ok, extra = pcall(prev, world)
+                if ok and type(extra) == "table" then
+                  for _, e in ipairs(extra) do out[#out + 1] = e end
+                end
+              end
+              local impl = bridge.__wildSkiesCastImpl
+              if impl then pcall(impl, out) end
+              return out
+            end)
+          end
+          bridge.__wildSkiesCastImpl = function(out)
+            for _, f in ipairs(flyers) do
+              if not f.dead then out[#out + 1] = f end
+            end
+          end
+        end
+      end
+    end
 
     local function skyTick(ow, dt)
       if not (ow and ow.map and ow.player) then return end
       dt = dt or 1 / 60
+      if Sky.goldWorld(ow) then
+        Sky.ensureDrawTail(ow, "__wildSkiesDrawFlyers", drawFlyersGold)
+        armVoxelCast()
+        -- with a session provider, the provider owns composition and
+        -- local seeding would fight its snapshots
+        if not sharedProvider then goldResidentTick(Game, ow, dt) end
+      end
       residentGhostDt = dt
       residentGhostClock = residentGhostClock + dt
       if residentGhostClock >= 0.5 then
@@ -1785,9 +2147,10 @@ return function(mod)
       if cooldown > 0 or #flyers >= cap then return end
       local tod = ow.tod or "DAY"
       local def = ow.map.def
-      local forest = def and def.tileset == "FOREST"
-      local outside = def and (forest or MapDef.isOutside(def,
-        FieldDefaults.field(Game.data, "outsideTilesets"))) or false
+      -- Ilex Forest has no FOREST tileset, but its id says canopy
+      local forest = (def ~= nil and def.tileset == "FOREST")
+        or (ow.map.id or ""):find("_FOREST", 1, true) ~= nil
+      local outside = forest or Sky.outsideMap(Game.data, def)
       -- a cave is dark at noon: its crepuscular slots (the Zubat line)
       -- fly at any hour, so Mt Moon's air is never empty by daylight
       local effTod = outside and tod or "NITE"
@@ -1814,37 +2177,32 @@ return function(mod)
         picksCache.peaceful = town
         -- ambient skies where the game itself hosts wildlife (sea
         -- routes carry encounter tables) and over every town and city
-        local encDef = Game.data.encounters
-          and Game.data.encounters[ow.map.id]
+        local wild = Sky.mapWild(Game.data, ow.map.id)
         if #picksCache.picks == 0 and def and outside
-           and (encDef or town) then
+           and (wild or town) then
           -- water encounters and no grass means open sea
-          local sea = not town and encDef and encDef.water ~= nil
-            and not (encDef.grass and encDef.grass.slots
-                     and #encDef.grass.slots > 0)
+          local sea = not town and wild ~= nil and wild.water
+            and not wild.grass
           local extKey = tod == "NITE" and "NITE" or sea and "SEA" or "DAY"
           local recs, order = derivedSky(Game.data)
-          local pool = ambientPool(Game.data, extKey, nocturnal, recs, order)
+          local near = Sky.nearbyMaps(Game.data, ow.map.id, 2)
+          local pool = ambientPool(Game.data, extKey, nocturnal, recs,
+            order, near)
           for _, species in ipairs(pool) do
             picksCache.picks[#picksCache.picks + 1] = { species = species }
           end
-          -- level bands the world itself taught us, for species the
+          -- level bands the NEARBY world taught us, for species the
           -- hand-tuned AMBIENT_LEVELS table has never heard of
           local bands = {}
           for s, rec in pairs(recs) do
-            if rec.lo <= rec.hi then bands[s] = { rec.lo, rec.hi } end
+            local hosted, lo, hi = localHosting(rec, near)
+            if hosted > 0 and lo <= hi then bands[s] = { lo, hi } end
           end
           picksCache.bands = bands
           -- the map's own slot levels, so ambient birds match the local
           -- level curve rather than a flat roll
-          local levels = {}
-          if encDef then
-            for _, tbl in ipairs({ encDef.grass, encDef.water }) do
-              for _, slot in ipairs((tbl and tbl.slots) or {}) do
-                if slot.level then levels[#levels + 1] = slot.level end
-              end
-            end
-          end
+          local levels = wild
+            and Sky.slotLevels(Game.data, ow.map.id, effTod) or {}
           picksCache.levels = levels[1] and levels or nil
           picksCache.ambient = true
         end
@@ -1876,11 +2234,7 @@ return function(mod)
         if levels then
           base = levels[love.math.random(#levels)]
         else
-          local n = 0
-          pcall(function()
-            local Badges = require("src.inventory.Badges")
-            n = Badges.count(Game.data, Game.save) or 0
-          end)
+          local n = Sky.badgeCount(Game.data, Game.save)
           base = love.math.random(3 + n * 5, 8 + n * 6)
         end
         local band = AMBIENT_LEVELS[pick.species]
@@ -1916,7 +2270,7 @@ return function(mod)
         tuneForMap(flyer)
         if ultra then flyer.bold = true end
         flyers[#flyers + 1] = flyer
-        table.insert(ow.entities, flyer)
+        attach(ow, flyer)
         if ultra then
           mod.log:info("the legendary %s (L%d) is crossing %s!",
                        tostring(flyer.species), flyer.level or 0, ow.map.id)
@@ -1935,7 +2289,7 @@ return function(mod)
               if wing then
                 tuneForMap(wing)
                 flyers[#flyers + 1] = wing
-                table.insert(ow.entities, wing)
+                attach(ow, wing)
               end
             end
           end
@@ -1953,11 +2307,14 @@ return function(mod)
     -- Populate the already-resident view on the first ready frame as well;
     -- the periodic refresh below is for movement and newly loaded neighbors,
     -- not the initial reveal.
-    syncResidentGhosts(Game, Game and Game.overworld)
+    syncResidentGhosts(Game, Sky.liveOverworld(Game))
 
     -- Keep a distinct population for every engine-resident seam map. The
     -- destination flock is already visible through ow.ghosts and becomes the
     -- live flock without a reroll or position jump when the player crosses.
+    -- Gen 1 seam only: Gold never calls this facade member and fires
+    -- map.exited at every crossing instead, so its flyers simply clear
+    -- at the seam and respawn on the far side.
     if not OC.__wildSkiesSeamWrapped then
       OC.__wildSkiesSeamWrapped = true
       local origCross = OC.crossConnection

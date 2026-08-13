@@ -34,11 +34,18 @@ local data = {
   sprites = { SPRITE_BIRD = { image = "generic_bird.png", frames = 6 } },
 }
 
--- an animated levitates def is borrowed, and cached on the second call
-levDef = { image = "lev/017.png", frames = 6, kind = "levitates" }
+-- an animated levitates def is borrowed, and cached on the second call;
+-- True Size sheets carry their own frame box and anchor, which must
+-- ride through or the renderer crops to the top-left 16x16 tile
+levDef = { image = "lev/017.png", frames = 6, kind = "levitates",
+           frameWidth = 24, frameHeight = 32, anchorX = 12, anchorY = 30 }
 local r, class = Sky.mountSprite(data, "PIDGEOTTO", "t")
 T.eq(r.def.image, "lev/017.png", "levitates def borrowed")
 T.eq(class, "BIRD", "icon class still resolved")
+T.eq(r.def.frameWidth, 24, "True Size frame width carries through")
+T.eq(r.def.frameHeight, 32, "True Size frame height carries through")
+T.eq(r.def.anchorY, 30, "True Size anchor carries through")
+T.check(Sky.trueSized(r), "a sized sheet is recognised as True Size")
 T.check(Sky.mountSprite(data, "PIDGEOTTO", "t") == r, "renderer cached")
 
 -- swimming fallthrough and missing art both land on the generic sheet
@@ -109,6 +116,109 @@ Sky.registerSpriteSource({ id = "opt_pack", resolve = function() end })
 T.check(Sky.spriteSourceChanged({ mod = "opt_pack" }),
   "registered source matched by id")
 Sky.unregisterSpriteSource("opt_pack")
+
+-- ------- WoK land sheets, and the dex-reorder guard (their issue #55)
+data.pokemon.FEAROW = { icon = "BIRD", dex = 22 }
+local landCalls = 0
+local landDef
+fakeGame.mods.exports = { overworld_wild_spawns = { render = {
+  waterSpriteRegistry = {
+    isReady = function() return true end,
+    resolve = function() return levDef end,
+  },
+  applyProviderSprite = function(self, entity, game)
+    landCalls = landCalls + 1
+    if not landDef then return false end
+    entity.sprite = { def = landDef }
+    return true
+  end,
+} } }
+
+-- no in-air art: the same HGSS land sheet WoK's own wilds wear
+levDef = nil
+landDef = { image = "hgss/land/022.png", frames = 6, walker = true,
+            trueColor = true, frameWidth = 24, frameHeight = 24 }
+local land = Sky.mountSprite(data, "FEAROW", "t9")
+T.eq(land.def.image, "hgss/land/022.png",
+  "no in-air art borrows the HGSS land sheet")
+T.check(Sky.trueSized(land), "the land sheet's True Size is recognised")
+
+-- in-air art still outranks the land sheet
+levDef = { image = "lev/017b.png", frames = 6, kind = "levitates" }
+landCalls = 0
+T.eq(Sky.mountSprite(data, "PIDGEOTTO", "t10").def.image, "lev/017b.png",
+  "levitates still outranks the land sheet")
+T.eq(landCalls, 0, "the land resolver is not consulted when air art exists")
+
+-- a reordered dex (sprites keyed by dex position land on the wrong
+-- species there) turns dex-keyed borrowing off entirely; the class
+-- sheet is at least the honest silhouette
+local reordered = {
+  icons = {},
+  pokemon = { PIDGEOTTO = { icon = "BIRD", dex = 17 },
+              MEWTWO = { icon = "MON", dex = 248 } },
+  sprites = { SPRITE_BIRD = { image = "generic_bird.png", frames = 6 } },
+}
+T.check(not Sky.canonicalDex(reordered), "a moved sentinel is detected")
+landCalls = 0
+T.eq(Sky.mountSprite(reordered, "PIDGEOTTO", "t11").def.image,
+  "generic_bird.png", "dex-keyed borrowing is off under a reordered dex")
+T.eq(landCalls, 0, "no borrowed resolver runs under a reordered dex")
+T.check(Sky.canonicalDex(data), "the vanilla dex space reads canonical")
+
+-- the Wilds pipeline embedded in Stadium 2's Gold mod serves the same
+-- borrowed art when Wilds of Kanto itself is not around
+data.pokemon.NOCTOWL = { icon = "BIRD", dex = 164 }
+fakeGame.mods.exports = { STADIUM2_OVERWORLD_MODELS = { wilds = {
+  render = {
+    applyProviderSprite = function(self, entity, game)
+      entity.sprite = { def = { image = "stadium/hgss/164.png",
+                                frames = 6, walker = true,
+                                trueColor = true } }
+      return true
+    end,
+  },
+} } }
+T.eq(Sky.mountSprite(data, "NOCTOWL", "t15").def.image,
+     "stadium/hgss/164.png",
+     "Stadium 2's embedded Wilds dresses the bird on Gold")
+
+-- a FORK under a new id serves the same way, by capability
+data.pokemon.SKARMORY = { icon = "BIRD", dex = 227 }
+fakeGame.mods.exports = { SOME_FUTURE_FORK = { wilds = {
+  render = {
+    applyProviderSprite = function(self, entity, game)
+      entity.sprite = { def = { image = "fork/hgss/227.png",
+                                frames = 6, walker = true,
+                                trueColor = true } }
+      return true
+    end,
+  },
+} } }
+T.eq(Sky.mountSprite(data, "SKARMORY", "t16").def.image,
+     "fork/hgss/227.png",
+     "an unnamed fork's embedded Wilds is found by capability")
+
+-- flight attitude: lean into a turn, pitch into a climb, level out
+-- and stop pulsing on the ground
+local f = { heading = 0, alt = 30, mode = "roam", facing = "right",
+            flap = 6, t = 1 }
+Sky.flightAttitude(f, 1 / 60)
+f.heading = 0.3
+Sky.flightAttitude(f, 1 / 60)
+T.check((f.__skyBank or 0) > 0, "a turn banks the sprite")
+f.alt = 34
+Sky.flightAttitude(f, 1 / 60)
+T.check((f.__skyPitch or 0) < 0, "a climb pitches the nose up")
+local angle, squash = Sky.flightTransform(f)
+T.check(angle ~= 0, "airborne transform carries the attitude")
+T.check(squash > 0.89 and squash <= 1, "the flap pulse stays subtle")
+f.mode = "ground"
+for _ = 1, 120 do Sky.flightAttitude(f, 1 / 60) end
+local gAngle, gSquash = Sky.flightTransform(f)
+T.eq(gAngle, 0, "grounded sprites sit level")
+T.eq(gSquash, 1, "grounded sprites do not pulse")
+T.check(math.abs(f.__skyBank) < 0.01, "the bank decays on the ground")
 
 -- the family's small shared helpers
 T.eq(Sky.monName(data, { nickname = "BUDDY", species = "PIDGEOTTO" }),

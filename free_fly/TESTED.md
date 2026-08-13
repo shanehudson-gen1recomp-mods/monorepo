@@ -1,3 +1,8 @@
+Gen 2 (Gold) support in 1.6.0 is covered by the headless suite and
+`modkit gen2check`, plus several in-game Gold rounds during
+development (takeoff, seams, followers, the gift ceremony); a full
+pre-release Gold pass is still recommended.
+
 Third-party mods this release was run alongside, with the exact
 versions used. Later versions of these mods may change behavior; if a
 combo misbehaves, check the version you have against this list first.

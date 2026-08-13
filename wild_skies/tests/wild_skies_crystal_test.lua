@@ -39,6 +39,7 @@ Data.encounters.GEN2_ROAD = {
   grass = { rate = 25, slots = {
     { species = "SKARMORY", level = 25 },
     { species = "XATU", level = 24 },
+    { species = "DODUO", level = 24 },
   } },
 }
 
@@ -157,10 +158,20 @@ end
 T.eq(hosts.SKARMORY, nil, "a land bird does not join the sea pool")
 T.eq(hosts.XATU, nil, "the ecology's night species sits out the day")
 
--- a town's day air hosts the overhaul's land birds
-hosts = skyHosts("PALLET_TOWN", "DAY")
+-- a town's day air hosts the overhaul's land birds.  GEN2_TOWN has no
+-- map graph in the data, so its pool stays world-wide.
+hosts = skyHosts("GEN2_TOWN", "DAY")
 T.check(hosts.SKARMORY ~= nil, "Skarmory patrols the town by day")
 T.eq(hosts.XATU, nil, "but Xatu only flies at night")
+T.eq(hosts.DODUO, nil, "a flightless FLYING type never joins the sky")
+
+-- local skies: PALLET_TOWN has a real connection graph in the data
+-- and GEN2_ROAD is nowhere near it, so the overhaul's far-away birds
+-- stay out of Pallet's air while the base pool keeps flying
+hosts = skyHosts("PALLET_TOWN", "DAY")
+T.eq(hosts.SKARMORY, nil,
+  "a species hosted far away stays out of a connected town's sky")
+T.check(hosts.PIDGEY ~= nil, "the local base pool still flies")
 
 -- Visible neighbor populations use the same derived dataset and ecology as
 -- the current map rather than falling back to the original Gen 1 hand lists.
@@ -184,7 +195,8 @@ T.check(ow.ghosts[1] and ow.ghosts[1].npc.species == "XATU",
 ow.neighbors = {}
 
 -- and the night sky belongs to what the ecology marks nocturnal
-hosts = skyHosts("PALLET_TOWN", "NITE")
+-- (GEN2_TOWN again: no graph, so the world-wide pool answers)
+hosts = skyHosts("GEN2_TOWN", "NITE")
 T.check(hosts.XATU ~= nil, "Xatu joins the night air")
 T.eq(hosts.SKARMORY, nil, "while the day birds roost")
 

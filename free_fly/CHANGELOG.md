@@ -1,5 +1,85 @@
 # Changelog
 
+## 1.6.0
+
+- Old Wilds of Kanto compatibility: 1.x builds cap follower art at
+  dex 151, so a Crystal 251 lead (Cyndaquil and friends) walked as a
+  wrapped Kanto species. Until the player updates, those followers
+  and trailers are dressed each frame in their own species' art
+  through the shared resolver; the shim announces itself once in the
+  log and retires on Wilds of Kanto 2.0.0+, whose resolver answers
+  correctly.
+- The walking sheet is stashed at TAKEOFF, before any mount swap can
+  touch it, and landings restore from that stash even when the
+  per-tick one was lost, so the player can never keep walking around
+  wearing the mount's art.
+
+- Gen 2 (Gold) support: the manifest declares `games: [gen1, gen2]`.
+  Core flight works end to end on Gold: the FREEFLY party entry (its
+  party submenu raises the same hook), takeoff, cruising over any
+  terrain, warp/trainer-sight/ledge/forced-movement immunity through
+  Gold's own World class seams, aerial interception of wild_skies
+  flyers, the airborne wild-battle gate riding World:startBattle (Gold
+  has no unpushed-battle factory), and B-to-land with the assisted
+  glide. The badge gate reads Chuck's STORMBADGE the way Gold's own
+  field moves do, and riding state comes from its playerState.
+- The player lift and mount composite ride src.world.gen2.Player
+  directly (Gold's class; the Gen 1 wraps never touch it), drawn under
+  Gold's (ox, oy, scale) convention. Under Stadium 2 voxel worlds the
+  player carries `_stadiumSkyRideLift`, its render-only altitude seam.
+- Gold seam crossings carry a flyer anywhere in bounds: tryConnection
+  validates the landing strip tile with isWalkable outside the
+  collision hook, so airborne crossings only worked where a walker
+  could cross; while flying that check now runs in a permissive
+  window (the Gen 1 FreeMove pattern), trees and sea included.
+  Landing rules are unchanged.
+- Voxel discovery is capability-based: any mod publishing the shared
+  library contract (exports.lib serving the voxel module family) is
+  found, known ids first for determinism, so future Gen 2 voxel mods
+  and forks compose the day they release.
+- Gold water landings work: setting down on water runs the same state
+  change Gold's own SurfStartStep does, with the engine's move user
+  and Morty's FOGBADGE as the gate (the badge option still turns it
+  off); taking off from a surf dismounts the state properly, and the
+  landed event says water on both generations.
+- The Gold camera tracks the airborne mount instead of pinning it to
+  the top edge (its live camera's follow wraps once and reads the
+  flight altitude).
+- FLIGHT MOTION toggle (on by default): the mount banks into turns,
+  pitches with climbs and dives, and pulses at the wing beat, the
+  same shared attitude wild_skies gives its birds; the landing shadow
+  stays flat beneath it.
+- Gold followers respect the flight: a companion that cannot fly
+  disappears for the duration (its engine re-adds it every frame, so
+  the removal runs after that each tick) and returns on landing
+  through the engine's own placement; a FLYING-type companion trails
+  through the air at the player's altitude wearing its own species'
+  art through the shared resolver.
+- Landing on Gold re-places its own follower through the engine's
+  map-entry seam: it walked beneath the flight and could end up
+  stacked on the landing cell, drawn over the player.
+- Deferred on Gold, degrading safely: water landings (the assisted
+  landing glides to dry ground), follower flight dress (Gold's own
+  follower engine keeps its ground rules), completed-step reactions
+  (no seam; spinners and poison stay live mid-air), the camera lift,
+  sea-crossing confirms and story gates (Kanto data, inert), and the
+  Pallet quickstart (its map script has no Gen 2 registry home and is
+  not registered there).
+- Gold quick start: a NOCTOWL waits in New Bark Town (same QUICK
+  START option). Gold has no map-script registry for mods, so the
+  bird is a runtime NPC answered through the world.interacted event,
+  with the offer on Gold's own showText / askYesNo pair, the cart's
+  yesorno ceremony, so you still get the choice. The A-press reaches
+  it through the facade's talkTo seam, the one Gold consults before
+  its script arms (a script-less runtime NPC matches none of them),
+  and the bird wears NOCTOWL's own portrait through the same art
+  resolver the sky birds use, with speciesId set so Stadium voxel
+  worlds model it in 3D. Taking it grants a
+  L10 NOCTOWL with FLY, badge-exempt like the Kanto Pidgeot, built by
+  Gold's own Mon factory (gift happiness, dex marked).
+- Not yet play-tested on a real Gold boot; `modkit gen2check` verdict
+  is "will load but degrade", warnings only.
+
 ## 1.5.5
 
 - Crystal 251 compatibility confirmed and pinned by a regression test:
