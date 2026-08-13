@@ -21,6 +21,9 @@
   could cross; while flying that check now runs in a permissive
   window (the Gen 1 FreeMove pattern), trees and sea included.
   Landing rules are unchanged.
+- Landing on Gold re-places its own follower through the engine's
+  map-entry seam: it walked beneath the flight and could end up
+  stacked on the landing cell, drawn over the player.
 - Deferred on Gold, degrading safely: water landings (the assisted
   landing glides to dry ground), follower flight dress (Gold's own
   follower engine keeps its ground rules), completed-step reactions

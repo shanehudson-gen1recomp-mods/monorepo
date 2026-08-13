@@ -222,6 +222,18 @@ return function(mod)
   end
 
   local function rebuildConvoyAfterLanding(game, ow, restoreEligibility)
+    if Sky.goldWorld(ow) then
+      -- Gold's own follower walked beneath the flight and can end up
+      -- stacked on the landing cell, drawn over the player; its own
+      -- map-entry placement puts it back a tile behind
+      pcall(function()
+        local Follower = require("src.world.gen2.Follower")
+        if Follower and Follower.onMapEntered then
+          Follower.onMapEntered(game, ow)
+        end
+      end)
+      return
+    end
     local ok, attempted, err = FollowerLanding.rebuild(
       mod, game, ow, restoreEligibility)
     if not ok then
