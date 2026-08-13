@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.6.1
+
+- The player can no longer get stuck walking around in the mount's
+  art. Mount renderers are recognized as air sheets (by tag, and by
+  their free_fly/wild_skies renderer seed for sessions poisoned by an
+  older build): takeoff never stashes one as the walking sheet, a
+  poisoned stash is discarded rather than restored on landing, and the
+  idle tick heals a bare air sheet left on the player by a mid-flight
+  reload, rebuilding the real walking sprite from the engine's own
+  player data (Gold's player rebuilds from its carried sprite def).
+- Shared sky library: on a Crystal-shaped Gen 1 boot, AUTO mount art
+  reads bird shapes off the Gen 1 icon class, so bird mounts keep the
+  flapping sheet instead of falling to their battle portrait.
+
 ## 1.6.0
 
 - Gen 2 (Gold) support: Free Fly now flies Johto. See the Gen 2
