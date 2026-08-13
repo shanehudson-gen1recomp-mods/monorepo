@@ -1567,6 +1567,9 @@ return function(mod)
       if not flying() then
         if p.freeFlyAlt then p.freeFlyAlt, p.freeFlying = nil, nil end
         p._stadiumSkyRideLift = nil
+        if Sky.goldWorld(ow) and ow.camera then
+          ow.camera.__freeFlyLift = 0
+        end
         if p.freeFlyWalkSprite then
           p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
         end
@@ -1624,6 +1627,24 @@ return function(mod)
           end
         end
       end
+      -- Gold re-follows the player's ground anchor every draw and has
+      -- no Renderer camera seam, but its camera is a live instance:
+      -- follow() wraps once per camera and reads the lift each call,
+      -- so the view tracks the airborne mount instead of pinning it
+      -- to the top edge.
+      if Sky.goldWorld(ow) and ow.camera then
+        local cam = ow.camera
+        if not cam.__freeFlyWrapped then
+          cam.__freeFlyWrapped = true
+          local origFollow = cam.follow
+          cam.follow = function(self2, x, y, vw, vh)
+            return origFollow(self2, x,
+              y - (self2.__freeFlyLift or 0), vw, vh)
+          end
+        end
+        cam.__freeFlyLift = state.alt
+      end
+
       -- Gold's engine follower is not flight-aware.  A companion that
       -- can fly trails through the air in its own species' art at the
       -- player's altitude; one that cannot sits the flight out.  Its
