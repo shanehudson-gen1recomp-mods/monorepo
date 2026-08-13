@@ -107,6 +107,24 @@ Sky.SPRITE_SOURCES = {
         species, dex)
     end,
   },
+  { -- any OTHER mod embedding the Wilds pipeline under the same
+    -- export shape (exports.wilds.render): capability probed, so a
+    -- fork under a new id serves art the day it ships.  Its option
+    -- flips will not live-re-dress (no id to match), which a respawn
+    -- catches.
+    id = "embedded_wilds_scan",
+    dexKeyed = true,
+    resolve = function(_, game, species, dex)
+      local exportsById = game and game.mods and game.mods.exports
+      for _, ex in pairs(exportsById or {}) do
+        local wilds = type(ex) == "table" and ex.wilds or nil
+        local def = Sky.bindPipelineDef(wilds and wilds.render, game,
+          species, dex)
+        if def then return def end
+      end
+      return nil
+    end,
+  },
 }
 
 -- drive a Wilds-family bind pipeline (Wilds of Kanto itself, or the

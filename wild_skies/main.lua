@@ -2005,28 +2005,36 @@ return function(mod)
     -- swaps the flyer list without stacking providers.
     local function armVoxelCast()
       local exports = Game.mods and Game.mods.exports
-      local stadium = exports and exports.STADIUM2_OVERWORLD_MODELS
-      local bridge = stadium and stadium.voxelPipelineState
-      if not (bridge and bridge.setExtraEntitiesProvider) then return end
-      if not bridge.__wildSkiesCast then
-        bridge.__wildSkiesCast = true
-        local prev = bridge.extraEntitiesProvider
-        bridge.setExtraEntitiesProvider(function(world)
-          local out = {}
-          if type(prev) == "function" then
-            local ok, extra = pcall(prev, world)
-            if ok and type(extra) == "table" then
-              for _, e in ipairs(extra) do out[#out + 1] = e end
+      if not exports then return end
+      -- capability, not id: any Gold voxel mod publishing the bridge
+      -- contract (a voxelPipelineState with an extra-entities slot)
+      -- gets the flyers, today's Stadium 2 and tomorrow's forks alike
+      for _, ex in pairs(exports) do
+        local bridge = type(ex) == "table" and ex.voxelPipelineState
+          or nil
+        if type(bridge) == "table"
+           and type(bridge.setExtraEntitiesProvider) == "function" then
+          if not bridge.__wildSkiesCast then
+            bridge.__wildSkiesCast = true
+            local prev = bridge.extraEntitiesProvider
+            bridge.setExtraEntitiesProvider(function(world)
+              local out = {}
+              if type(prev) == "function" then
+                local ok, extra = pcall(prev, world)
+                if ok and type(extra) == "table" then
+                  for _, e in ipairs(extra) do out[#out + 1] = e end
+                end
+              end
+              local impl = bridge.__wildSkiesCastImpl
+              if impl then pcall(impl, out) end
+              return out
+            end)
+          end
+          bridge.__wildSkiesCastImpl = function(out)
+            for _, f in ipairs(flyers) do
+              if not f.dead then out[#out + 1] = f end
             end
           end
-          local impl = bridge.__wildSkiesCastImpl
-          if impl then pcall(impl, out) end
-          return out
-        end)
-      end
-      bridge.__wildSkiesCastImpl = function(out)
-        for _, f in ipairs(flyers) do
-          if not f.dead then out[#out + 1] = f end
         end
       end
     end

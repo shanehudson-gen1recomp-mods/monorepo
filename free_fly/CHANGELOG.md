@@ -21,6 +21,10 @@
   could cross; while flying that check now runs in a permissive
   window (the Gen 1 FreeMove pattern), trees and sea included.
   Landing rules are unchanged.
+- Voxel discovery is capability-based: any mod publishing the shared
+  library contract (exports.lib serving the voxel module family) is
+  found, known ids first for determinism, so future Gen 2 voxel mods
+  and forks compose the day they release.
 - Gold water landings work: setting down on water runs the same state
   change Gold's own SurfStartStep does, with the engine's move user
   and Morty's FOGBADGE as the gate (the badge option still turns it

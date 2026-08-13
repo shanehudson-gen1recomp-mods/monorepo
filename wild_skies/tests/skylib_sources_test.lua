@@ -183,6 +183,22 @@ T.eq(Sky.mountSprite(data, "NOCTOWL", "t15").def.image,
      "stadium/hgss/164.png",
      "Stadium 2's embedded Wilds dresses the bird on Gold")
 
+-- a FORK under a new id serves the same way, by capability
+data.pokemon.SKARMORY = { icon = "BIRD", dex = 227 }
+fakeGame.mods.exports = { SOME_FUTURE_FORK = { wilds = {
+  render = {
+    applyProviderSprite = function(self, entity, game)
+      entity.sprite = { def = { image = "fork/hgss/227.png",
+                                frames = 6, walker = true,
+                                trueColor = true } }
+      return true
+    end,
+  },
+} } }
+T.eq(Sky.mountSprite(data, "SKARMORY", "t16").def.image,
+     "fork/hgss/227.png",
+     "an unnamed fork's embedded Wilds is found by capability")
+
 -- flight attitude: lean into a turn, pitch into a climb, level out
 -- and stop pulsing on the ground
 local f = { heading = 0, alt = 30, mode = "roam", facing = "right",

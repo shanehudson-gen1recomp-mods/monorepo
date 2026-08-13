@@ -29,6 +29,11 @@
     Pidgey reads as a Pidgey rather than a tinted generic bird.
     Sprite packs registered through `registerSpriteSource` still
     outrank all of it, on either generation.
+- Voxel integration is capability-based, not id-based: any Gold voxel
+  mod publishing the bridge contract (voxelPipelineState with the
+  extra-entities slot) gets the flyers in its cast, and any mod
+  embedding the Wilds pipeline under exports.wilds.render serves
+  borrowed art, so forks compose the day they release.
 - Gold rooftop perching: with Stadium 2 installed, its shape
   profile's per-cell structure heights (VoxelScene.groundAt) tell the
   birds which cells are buildings, the same way the Dramatic Shape

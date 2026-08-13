@@ -97,7 +97,9 @@ bridge.setExtraEntitiesProvider = function(fn)
   bridge.extraEntitiesProvider = fn
 end
 bridge.setExtraEntitiesProvider(function() return { "wilds_mon" } end)
-Game.mods.exports.STADIUM2_OVERWORLD_MODELS = {
+-- deliberately NOT the Stadium id: the chain is capability-probed,
+-- so a future fork's bridge gets the flyers too
+Game.mods.exports.FUTURE_VOXEL_FORK = {
   voxelPipelineState = bridge,
 }
 OC.__wildSkiesTick(ow, 1 / 60) -- arms the chain
