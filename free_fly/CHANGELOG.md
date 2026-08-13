@@ -21,6 +21,18 @@
   could cross; while flying that check now runs in a permissive
   window (the Gen 1 FreeMove pattern), trees and sea included.
   Landing rules are unchanged.
+- Gold water landings work: setting down on water runs the same state
+  change Gold's own SurfStartStep does, with the engine's move user
+  and Morty's FOGBADGE as the gate (the badge option still turns it
+  off); taking off from a surf dismounts the state properly, and the
+  landed event says water on both generations.
+- The Gold camera tracks the airborne mount instead of pinning it to
+  the top edge (its live camera's follow wraps once and reads the
+  flight altitude).
+- FLIGHT MOTION toggle (on by default): the mount banks into turns,
+  pitches with climbs and dives, and pulses at the wing beat, the
+  same shared attitude wild_skies gives its birds; the landing shadow
+  stays flat beneath it.
 - Gold followers respect the flight: a companion that cannot fly
   disappears for the duration (its engine re-adds it every frame, so
   the removal runs after that each tick) and returns on landing

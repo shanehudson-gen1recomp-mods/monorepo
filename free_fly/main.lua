@@ -91,6 +91,10 @@ return function(mod)
     { key = "badges", label = "BADGE CHECKS", type = "toggle", default = true },
     -- the Pallet Town gift Pidgeot; off leaves a fully vanilla start
     { key = "quickstart", label = "QUICK START", type = "toggle", default = true },
+    -- the mount banks into turns, pitches with climbs and pulses at
+    -- the wing beat, the same attitude wild_skies gives its birds
+    { key = "motion", label = "FLIGHT MOTION", type = "toggle",
+      default = true },
   })
 
   -- with jj_quick_select installed (and only then), a FLY WHISTLE key
@@ -211,12 +215,12 @@ return function(mod)
 
   -- reason: "landed", "indoors", "blackout" or "save_loaded"; water is
   -- true when the landing handed the player straight into surfing
-  local function emitLanded(reason, p)
+  local function emitLanded(reason, p, wet)
     pcall(function()
       mod.events:emit("mod.free_fly.landed", {
         reason = reason,
         x = p and p.cellX, y = p and p.cellY,
-        water = (p and p.surfing == true) or nil,
+        water = (wet or (p ~= nil and p.surfing == true)) or nil,
       })
     end)
   end
@@ -372,6 +376,14 @@ return function(mod)
     if state.resolveMount then state.resolveMount(mon) end
     -- taking off from a surf dismounts into the air
     ow.player.surfing = nil
+    if Sky.goldWorld(ow) and ow.applyPlayerState then
+      pcall(function()
+        local FieldMoves = require("src.world.gen2.FieldMoves")
+        if FieldMoves.isSurfing(ow.playerState) then
+          ow:applyPlayerState(FieldMoves.PLAYER_NORMAL)
+        end
+      end)
+    end
     ow.player.freeFlying = true
     pcall(function()
       require("src.core.Sound").play(require("src.core.Game").data, "Fly")
@@ -1380,9 +1392,17 @@ return function(mod)
     end
 
     local function surfAllowed(ow)
-      -- Gold water landings wait on its surf-state seam; the assisted
-      -- landing glides to dry ground there instead
-      if Sky.goldWorld(ow) then return false end
+      if Sky.goldWorld(ow) then
+        -- Gold: the engine's own move user, gated on Morty's FOGBADGE
+        -- the way its field moves gate SURF
+        local knows = partyKnowsSurf(Game.save)
+          or (ow.partyMoveUser ~= nil and ow:partyMoveUser("SURF") ~= nil)
+        if not knows then return false end
+        if not mod.options:get("badges") then return true end
+        local ok, FieldMoves = pcall(require, "src.world.gen2.FieldMoves")
+        return (ok and FieldMoves and FieldMoves.hasBadge
+          and FieldMoves.hasBadge(Game.save, "FOG")) == true
+      end
       return (fieldMoveUser(ow, "SURF") ~= nil or partyKnowsSurf(Game.save))
         and (not mod.options:get("badges")
              or (Game.save.inventory and Game.save.inventory.SOULBADGE))
@@ -1772,8 +1792,21 @@ return function(mod)
           else
             state.phase = "idle"
             -- setting down on water hands you straight to a SURF-knower
-            if ow.map:isWaterCell(p.cellX, p.cellY) then
-              p.surfing = true
+            local wetLanding = ow.map:isWaterCell(p.cellX, p.cellY)
+            if wetLanding then
+              if Sky.goldWorld(ow) then
+                -- the same state change Gold's own SurfStartStep runs
+                local okFM, FieldMoves = pcall(require,
+                  "src.world.gen2.FieldMoves")
+                local surfer = ow.partyMoveUser
+                  and ow:partyMoveUser("SURF") or nil
+                if okFM and FieldMoves and ow.applyPlayerState then
+                  pcall(ow.applyPlayerState, ow,
+                    FieldMoves.surfType(surfer))
+                end
+              else
+                p.surfing = true
+              end
               mod.log:info("landed on the water; surfing")
             else
               mod.log:info("landed")
@@ -1786,7 +1819,7 @@ return function(mod)
             rebuildConvoyAfterLanding(Game, ow, function()
               syncWildsFollowers(false)
             end)
-            emitLanded("landed", p)
+            emitLanded("landed", p, wetLanding)
             return
           end
         end
@@ -1900,6 +1933,17 @@ return function(mod)
       -- into the seam asks again, until the player says CROSS
       state.askCooldown = math.max(0, (state.askCooldown or 0) - dt)
       state.bob = (state.bob + dt * 4) % (2 * math.pi)
+      -- mount attitude: heading from the facing, altitude from the
+      -- flight state; the shared math does the leaning
+      local HEADINGS = { right = 0, down = math.pi / 2,
+                         left = math.pi, up = -math.pi / 2 }
+      state.motion = state.motion or { flap = 8 }
+      state.motion.heading = HEADINGS[p.facing] or 0
+      state.motion.alt = state.alt
+      state.motion.facing = p.facing
+      state.motion.mode = flying() and "roam" or "ground"
+      state.motion.t = (state.motion.t or 0) + dt
+      Sky.flightAttitude(state.motion, dt)
       local hover = state.phase == "flying" and math.sin(state.bob) * 2 or 0
       -- altitude is absolute: the voxel scene adds the ground height back
       -- under the card, so standing geometry eats into the visual lift
@@ -2352,7 +2396,8 @@ return function(mod)
         return origDraw(self, camX, camY)
       end
       -- the shadow shrinks with height and turns green over landable
-      -- ground, so B-to-land reads at a glance
+      -- ground, so B-to-land reads at a glance; it stays flat below
+      -- the attitude transform
       if self.freeFlyCanLand then
         love.graphics.setColor(0.1, 0.45, 0.15, 0.45)
       else
@@ -2363,6 +2408,20 @@ return function(mod)
       love.graphics.ellipse("fill", self.px + 8 - camX, self.py + 13 - camY,
                             r, r * 0.4)
       love.graphics.setColor(1, 1, 1, 1)
+      local angle, squash = 0, 1
+      if mod.options:get("motion") and state.motion then
+        angle, squash = Sky.flightTransform(state.motion)
+      end
+      local spun = angle ~= 0 or squash ~= 1
+      if spun then
+        local ax = math.floor(self.px + 8 - camX)
+        local ay = math.floor(self.py - lift + 8 - camY)
+        love.graphics.push()
+        love.graphics.translate(ax, ay)
+        love.graphics.rotate(angle)
+        love.graphics.scale(1, squash)
+        love.graphics.translate(-ax, -ay)
+      end
       local ry = self.py - math.floor(lift + 0.5)
       local flap = math.floor(love.timer.getTime()
                               * (self.freeFlyFlapRate or 8)) % 2
@@ -2382,6 +2441,7 @@ return function(mod)
       end
       bird:draw(self.px, ry, camX, camY, self.facing, flap, false)
       if s ~= 1 then love.graphics.pop() end
+      if spun then love.graphics.pop() end
     end
 
     local SpriteRenderer = require("src.render.SpriteRenderer")
