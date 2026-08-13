@@ -166,6 +166,23 @@ T.eq(Sky.mountSprite(reordered, "PIDGEOTTO", "t11").def.image,
 T.eq(landCalls, 0, "no borrowed resolver runs under a reordered dex")
 T.check(Sky.canonicalDex(data), "the vanilla dex space reads canonical")
 
+-- the Wilds pipeline embedded in Stadium 2's Gold mod serves the same
+-- borrowed art when Wilds of Kanto itself is not around
+data.pokemon.NOCTOWL = { icon = "BIRD", dex = 164 }
+fakeGame.mods.exports = { STADIUM2_OVERWORLD_MODELS = { wilds = {
+  render = {
+    applyProviderSprite = function(self, entity, game)
+      entity.sprite = { def = { image = "stadium/hgss/164.png",
+                                frames = 6, walker = true,
+                                trueColor = true } }
+      return true
+    end,
+  },
+} } }
+T.eq(Sky.mountSprite(data, "NOCTOWL", "t15").def.image,
+     "stadium/hgss/164.png",
+     "Stadium 2's embedded Wilds dresses the bird on Gold")
+
 -- flight attitude: lean into a turn, pitch into a climb, level out
 -- and stop pulsing on the ground
 local f = { heading = 0, alt = 30, mode = "roam", facing = "right",

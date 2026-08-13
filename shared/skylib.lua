@@ -85,31 +85,50 @@ Sky.SPRITE_SOURCES = {
     -- own wilds wear and Dramatic Sky Ride's mounts fly on.  Standing
     -- poses, so the levitates in-air art above outranks this; every
     -- creature the sky asks about is airborne anyway, so no further
-    -- gate is needed.  Driving their own bind pipeline with a
-    -- throwaway entity keeps their style routing, palette mode and
-    -- True Size decisions authoritative.
+    -- gate is needed.
     mod = "overworld_wild_spawns",
     id = "overworld_wild_spawns_land",
     dexKeyed = true,
     resolve = function(exports, game, species, dex)
-      local render = exports and exports.render
-      if not (render and render.applyProviderSprite) then return nil end
-      local entity = { species = species, enhancedDexId = dex,
-                       id = "sky_borrow_" .. tostring(species),
-                       spawnId = "sky_borrow_" .. tostring(species) }
-      local ok, applied = pcall(render.applyProviderSprite, render,
-                                entity, game)
-      if not (ok and applied and entity.sprite
-              and type(entity.sprite.def) == "table") then
-        return nil
-      end
-      local def = entity.sprite.def
-      if type(def.image) ~= "string" then return nil end
-      -- geometry, trueColor and frames all ride through as theirs
-      return def
+      return Sky.bindPipelineDef(exports and exports.render, game,
+        species, dex)
+    end,
+  },
+  { -- the same Wilds pipeline EMBEDDED in Stadium 2's Gold mod: on a
+    -- Gold boot its HGSS sheets are the only per-species walker art
+    -- around, and its 16x16 cards are exactly what that mod's voxel
+    -- billboards expect (front-pic portraits texture wrong there)
+    mod = "STADIUM2_OVERWORLD_MODELS",
+    id = "stadium2_wilds_land",
+    dexKeyed = true,
+    resolve = function(exports, game, species, dex)
+      local wilds = exports and exports.wilds
+      return Sky.bindPipelineDef(wilds and wilds.render, game,
+        species, dex)
     end,
   },
 }
+
+-- drive a Wilds-family bind pipeline (Wilds of Kanto itself, or the
+-- copy embedded in Stadium 2's Gold mod) with a throwaway entity and
+-- lift the finished def: style routing, palette mode and True Size
+-- stay the provider's own decisions, and geometry, trueColor and
+-- frames all ride through as theirs
+function Sky.bindPipelineDef(render, game, species, dex)
+  if not (render and render.applyProviderSprite) then return nil end
+  local entity = { species = species, enhancedDexId = dex,
+                   id = "sky_borrow_" .. tostring(species),
+                   spawnId = "sky_borrow_" .. tostring(species) }
+  local ok, applied = pcall(render.applyProviderSprite, render,
+                            entity, game)
+  if not (ok and applied and entity.sprite
+          and type(entity.sprite.def) == "table") then
+    return nil
+  end
+  local def = entity.sprite.def
+  if type(def.image) ~= "string" then return nil end
+  return def
+end
 
 -- other mods can offer their own in-air art: a source carries a mod id
 -- (its exports are passed to resolve; skipped while that mod is off) or
