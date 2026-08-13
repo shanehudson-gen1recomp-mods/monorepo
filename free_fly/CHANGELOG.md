@@ -2,6 +2,13 @@
 
 ## 1.6.0
 
+- Old Wilds of Kanto compatibility: 1.x builds cap follower art at
+  dex 151, so a Crystal 251 lead (Cyndaquil and friends) walked as a
+  wrapped Kanto species. Until the player updates, those followers
+  and trailers are dressed each frame in their own species' art
+  through the shared resolver; the shim announces itself once in the
+  log and retires on Wilds of Kanto 2.0.0+, whose resolver answers
+  correctly.
 - The walking sheet is stashed at TAKEOFF, before any mount swap can
   touch it, and landings restore from that stash even when the
   per-tick one was lost, so the player can never keep walking around

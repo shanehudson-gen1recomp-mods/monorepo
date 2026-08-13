@@ -1567,6 +1567,58 @@ return function(mod)
       end
     end
 
+    -- old Wilds of Kanto (1.x) wraps dex past 151 into Kanto art, so
+    -- a Crystal 251 follower walks as the wrong species until the
+    -- player updates.  This dresses those followers in their own
+    -- species' art each frame, AFTER the foreign engine's own sprite
+    -- swaps (this tick runs at the frame's tail), and retires itself
+    -- on 2.0.0+, where their resolver answers correctly.
+    local oldWilds  -- nil = not probed, false = absent or fixed
+    local function dressWrappedFollower(game, ow)
+      if oldWilds == nil then
+        local wilds = mod.find("overworld_wild_spawns")
+        oldWilds = (wilds ~= nil
+          and tostring(wilds.version or ""):match("^1%.") ~= nil)
+          or false
+        if oldWilds then
+          mod.log:info("Wilds of Kanto %s caps art at dex 151; "
+            .. "dressing its Johto followers until it is updated",
+            tostring(wilds.version))
+        end
+      end
+      if not oldWilds then return end
+      local function dress(npc, species)
+        if not (npc and species) then return end
+        local def = game.data.pokemon and game.data.pokemon[species]
+        if not (def and (def.dex or 0) > 151) then return end
+        local sprite = Sky.mountSprite(game.data, species,
+          "free_fly_compat")
+        if sprite then npc.sprite = sprite end
+      end
+      -- the follower module the same way the tick reaches it: the
+      -- local PF binding lives later in this file
+      local PFmod = package.loaded["src.world.PikachuFollower"]
+      local npc = PFmod and PFmod.current and PFmod.current(ow) or nil
+      if npc then
+        local species
+        local pokepc = mod.find("PokePCFollowers_VoxelMerge")
+        if pokepc and pokepc.exports and pokepc.exports.activeMon then
+          local ok, mon = pcall(pokepc.exports.activeMon, game)
+          species = ok and mon and mon.species or nil
+        end
+        if not species then
+          local lead = game.save and game.save.party
+            and game.save.party[1]
+          species = lead and lead.species
+        end
+        dress(npc, species)
+      end
+      for _, trailer in ipairs(ow.pokepcTrailers or {}) do
+        dress(trailer, trailer and trailer.pokepcMon
+          and trailer.pokepcMon.species)
+      end
+    end
+
     OC.__freeFlyTick = function(ow, dt)
       -- the shared wrap is mid-frame through an older leftover wrap:
       -- the outermost runs this tick once when the frame unwinds
@@ -1579,6 +1631,9 @@ return function(mod)
       if ensurePF then ensurePF() end
       local p = ow.player
       if not p then return end
+      if not Sky.goldWorld(ow) then
+        pcall(dressWrappedFollower, Game, ow)
+      end
       if ow.map and (not state.landmark
                      or state.landmark.mapId ~= ow.map.id
                      or state.landmark.retry) then
