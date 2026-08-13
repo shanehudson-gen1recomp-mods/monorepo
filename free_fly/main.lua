@@ -631,6 +631,39 @@ return function(mod)
     if not GEN2_BOOT then return end
     local ow = mod.world and mod.world:overworld()
     if not (ow and ow.map and ow.map.id == "NEW_BARK_TOWN") then return end
+    -- the species' own art through the same resolver the sky birds
+    -- use; PORTRAIT forces the species-true front pic, and speciesId
+    -- lets Stadium voxel worlds model it
+    local function dressGoldGift()
+      for _, npc in ipairs(ow.npcs or {}) do
+        if npc.def and npc.def.name == GOLD_GIFT_NAME then
+          npc.speciesId = GOLD_GIFT_SPECIES
+          local game = require("src.core.Game")
+          local sprite = Sky.mountSprite(game.data, GOLD_GIFT_SPECIES,
+            "free_fly_gift", { skyArt = "portrait" })
+          if sprite then
+            npc.sprite = sprite
+            if rawget(sprite, "draw") ~= nil then
+              -- a pic renderer draws through its own overworld-sized
+              -- path; Gold calls draw(self, ox, oy, scale), the Gen 1
+              -- camera math scaled by s
+              npc.draw = function(self2, ox, oy, sc)
+                local G = love.graphics
+                sc = sc or 1
+                G.push("all")
+                G.scale(sc, sc)
+                sprite:draw(self2.px, self2.py,
+                  -(ox or 0) / sc, -(oy or 0) / sc,
+                  self2.facing or "down",
+                  math.floor(love.timer.getTime() * 2) % 2)
+                G.pop()
+              end
+            end
+          end
+          return
+        end
+      end
+    end
     local wanted = mod.options:get("quickstart") and not goldGiftTaken()
     -- adopt a survivor from an earlier visit instead of spawning a
     -- twin; retire it when the gift is taken or the option is off
@@ -641,6 +674,7 @@ return function(mod)
     end
     if existing[1] then
       state.goldGiftNpcId = existing[1]
+      dressGoldGift()
       return
     end
     if not wanted then return end
@@ -663,6 +697,7 @@ return function(mod)
           palette = 0, type = 0,
           x = x, y = y,
         }) or nil
+        dressGoldGift()
         return
       end
     end
@@ -706,19 +741,19 @@ return function(mod)
     return true
   end
 
-  mod.events:on("world.interacted", function(ev)
-    if not GEN2_BOOT then return end
-    if not (ev and ev.kind == "npc" and ev.mapId == "NEW_BARK_TOWN") then
-      return
-    end
-    local def = ev.target and ev.target.def
-    if not (def and def.name == GOLD_GIFT_NAME) then return end
-    local ow = mod.world and mod.world:overworld()
-    if not (ow and ow.showText and ow.askYesNo) then return end
+  -- Gold answers an A-press by consulting the facade's talkTo seam
+  -- BEFORE its script arms, and a script-less runtime NPC matches no
+  -- arm at all, so the ceremony lives on that seam (installed at
+  -- game.ready).  showText / askYesNo is the cart's own yesorno
+  -- pattern: the choice stacks over the standing text box.
+  local function goldGiftCeremony(ow, npc)
+    local def = npc and npc.def
+    if not (def and def.name == GOLD_GIFT_NAME) then return false end
+    if not (ow and ow.showText and ow.askYesNo) then return false end
     local game = require("src.core.Game")
     if goldGiftTaken() then
       ow:showText("NOCTOWL hoots\nsoftly.", function() end)
-      return
+      return true
     end
     ow:showText("The NOCTOWL has\nbeen watching you.\f"
       .. "It can fly you\nanywhere, badge\for no badge.\nClimb on?",
@@ -746,7 +781,8 @@ return function(mod)
           end
         end)
       end)
-  end)
+    return true
+  end
 
   mod.events:on("map.entered", function(ev)
     state.giftNpcId = nil
@@ -1945,6 +1981,23 @@ return function(mod)
           return origCarpet(self, ...)
         end
       end
+      -- the facade's talkTo seam: Gold consults it before its script
+      -- arms, which is what makes a script-less gift NPC answerable.
+      -- A false return falls through to the normal dispatch.
+      if not OC.__freeFlyTalkWrapped then
+        OC.__freeFlyTalkWrapped = true
+        local prev = OC.talkTo
+        OC.talkTo = function(owT, npc)
+          local gate = OC.__freeFlyGiftTalk
+          if gate then
+            local ok, handled = pcall(gate, owT, npc)
+            if ok and handled then return true end
+          end
+          if type(prev) == "function" then return prev(owT, npc) end
+          return false
+        end
+      end
+      OC.__freeFlyGiftTalk = goldGiftCeremony
     end
 
     local function dangerAllowed(mapId)

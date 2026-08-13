@@ -26,7 +26,12 @@
   START option). Gold has no map-script registry for mods, so the
   bird is a runtime NPC answered through the world.interacted event,
   with the offer on Gold's own showText / askYesNo pair, the cart's
-  yesorno ceremony, so you still get the choice. Taking it grants a
+  yesorno ceremony, so you still get the choice. The A-press reaches
+  it through the facade's talkTo seam, the one Gold consults before
+  its script arms (a script-less runtime NPC matches none of them),
+  and the bird wears NOCTOWL's own portrait through the same art
+  resolver the sky birds use, with speciesId set so Stadium voxel
+  worlds model it in 3D. Taking it grants a
   L10 NOCTOWL with FLY, badge-exempt like the Kanto Pidgeot, built by
   Gold's own Mon factory (gift happiness, dex marked).
 - Not yet play-tested on a real Gold boot; `modkit gen2check` verdict
