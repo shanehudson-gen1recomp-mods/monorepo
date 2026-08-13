@@ -18,6 +18,13 @@ plus a follower-sprite provider. Free Fly is the small alternative: one
 mechanic, no dependencies, and it works in the flat 2D game as well as
 in voxel.
 
+Free Fly also runs on Gen 2 (Gold) boots: the FREEFLY party entry,
+flight over any terrain and across every seam, aerial interception,
+water landings straight into surfing (FOGBADGE-gated), and a NOCTOWL
+quick start waiting in New Bark Town. Flight is gated on Chuck's
+STORMBADGE there, matching Gold's own FLY rules. Gold support is new
+and lightly play-tested; reports welcome.
+
 ## Getting airborne
 
 1. Have a party member that can use FLY. The species must be
