@@ -531,11 +531,58 @@ return function(mod)
     return sprite, CLASS_PROFILE[class] or DEFAULT_PROFILE
   end
 
+  -- Gold roofs come from the same place Gen 1's do, a voxel mod's
+  -- shape profile: Stadium 2's VoxelScene.groundAt answers per-cell
+  -- structure heights, cell conversion and stairs included.  Its
+  -- profile speaks TilesetJohto while the engine map says
+  -- TILESET_JOHTO, so the id is normalized in place the same way (and
+  -- into the same field) the mod's own bridge does, and the two never
+  -- fight over it.  Plain data, so rooftop perching works in flat 2D.
+  local goldGround         -- nil = not tried, false = unavailable
+  local function goldRoofHeightAt(map, cx, cy)
+    if goldGround == nil then
+      goldGround = false
+      local Game = require("src.core.Game")
+      local exports = Game.mods and Game.mods.exports
+      for _, ex in pairs(exports or {}) do
+        local lib = type(ex) == "table" and ex.lib or nil
+        if lib and lib.require then
+          local ok, scene = pcall(lib.require, "VoxelScene")
+          if ok and scene and scene.groundAt then
+            goldGround = {
+              scene = scene,
+              normalize = type(ex.voxelPipelineState) == "table"
+                and ex.voxelPipelineState.profileTilesetId or nil,
+            }
+            break
+          end
+        end
+      end
+    end
+    if not goldGround then return nil end
+    local ts = map.tileset
+    if ts and goldGround.normalize
+       and ts._stadiumEngineTilesetId == nil then
+      local ok, mapped = pcall(goldGround.normalize, ts.id)
+      if ok and type(mapped) == "string" and mapped ~= ts.id then
+        ts._stadiumEngineTilesetId = ts.id
+        ts.id = mapped
+      end
+    end
+    local ok, h = pcall(goldGround.scene.groundAt, map, cx, cy)
+    if not ok or type(h) ~= "number" or h < 16 then return nil end
+    return h
+  end
+
   -- the voxel mod's shape profile, when installed, tells us which cells
   -- are building-scale solids a bird can sit on top of.  The profile is
   -- plain data, so rooftop perching works in the flat 2D game too.
   local tileShape          -- nil = not tried, false = unavailable
   local function roofHeightAt(map, cx, cy)
+    -- a Gold map carries cellCollision; Gen 1's never does
+    if map.cellCollision ~= nil then
+      return goldRoofHeightAt(map, cx, cy)
+    end
     if tileShape == nil then
       tileShape = false
       local Game = require("src.core.Game")
