@@ -1624,6 +1624,55 @@ return function(mod)
           end
         end
       end
+      -- Gold's engine follower is not flight-aware.  A companion that
+      -- can fly trails through the air in its own species' art at the
+      -- player's altitude; one that cannot sits the flight out.  Its
+      -- engine re-adds it every frame and this tick runs after that,
+      -- so the removal holds for the drawn frame; landing re-places it
+      -- through the engine's own map-entry path.
+      if Sky.goldWorld(ow) then
+        local okF, Follower = pcall(require, "src.world.gen2.Follower")
+        local fnpc = okF and Follower and Follower.current
+          and Follower.current(ow) or nil
+        if fnpc then
+          local lead = Game.save and Game.save.party
+            and Game.save.party[1] or nil
+          if lead and Sky.hasType(Game.data, lead.species, "FLYING") then
+            if state.goldFollowerSpecies ~= lead.species then
+              state.goldFollowerSpecies = lead.species
+              local sprite = Sky.mountSprite(Game.data, lead.species,
+                "free_fly_follower")
+              -- only a stock-shaped renderer: a pic renderer's own
+              -- draw speaks the Gen 1 signature Gold's Npc never uses
+              state.goldFollowerSprite =
+                (sprite and rawget(sprite, "draw") == nil) and sprite
+                or nil
+            end
+            if state.goldFollowerSprite then
+              fnpc.sprite = state.goldFollowerSprite
+            end
+            if not fnpc.__freeFlyGoldDress then
+              fnpc.__freeFlyGoldDress = true
+              local origDraw = fnpc.draw
+              fnpc.draw = function(self2, ox, oy, sc)
+                local lift = (self2.__freeFlyLift or 0) * (sc or 1)
+                return origDraw(self2, ox, oy - lift, sc)
+              end
+            end
+            fnpc.__freeFlyLift = state.alt
+          else
+            for i = #(ow.npcs or {}), 1, -1 do
+              if ow.npcs[i] == fnpc then table.remove(ow.npcs, i) end
+            end
+            for i = #(ow.entities or {}), 1, -1 do
+              if ow.entities[i] == fnpc then
+                table.remove(ow.entities, i)
+              end
+            end
+          end
+        end
+      end
+
       -- the mount IS the player's sheet while airborne, so every renderer
       -- (voxel first/third person frame remaps included) shows it; the
       -- walking sheet is stashed for the rider overlay and the landing

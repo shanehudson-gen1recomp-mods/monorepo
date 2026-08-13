@@ -21,6 +21,12 @@
   could cross; while flying that check now runs in a permissive
   window (the Gen 1 FreeMove pattern), trees and sea included.
   Landing rules are unchanged.
+- Gold followers respect the flight: a companion that cannot fly
+  disappears for the duration (its engine re-adds it every frame, so
+  the removal runs after that each tick) and returns on landing
+  through the engine's own placement; a FLYING-type companion trails
+  through the air at the player's altitude wearing its own species'
+  art through the shared resolver.
 - Landing on Gold re-places its own follower through the engine's
   map-entry seam: it walked beneath the flight and could end up
   stacked on the landing cell, drawn over the player.
