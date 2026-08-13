@@ -50,6 +50,27 @@ return function(mod)
     return
   end
 
+  -- Gold is a second engine: content with no Gen 2 registry home (the
+  -- Pallet map script) must not even register there, and a few reads
+  -- split per generation below.  The loader's own generation is the
+  -- authority at load time, before any world exists.
+  local GEN2_BOOT = (function()
+    local ok, GV = pcall(require, "src.core.GameVersion")
+    if ok and GV and GV.generation and GV.generation() == 2 then
+      return true
+    end
+    -- the loader's generation, probed through the arm it hands us: at
+    -- load time the Gen 2 WorldAPI is nil (it materializes with the
+    -- live game) and even materialized it never carries
+    -- startWildBattle.  This also covers headless loads, where
+    -- GameVersion still answers 1.
+    local okW, world = pcall(function() return mod.world end)
+    if not okW then return false end
+    if world == nil then return true end
+    return (type(world) == "table"
+      and world.startWildBattle == nil) == true
+  end)()
+
   local RISE_SPEED = 72       -- px/s takeoff and landing lerp
 
   mod.options:define({
@@ -141,6 +162,7 @@ return function(mod)
     local ok, BattleState = pcall(require, "src.battle.BattleState")
     for _, screen in ipairs(screens) do
       if screen and (screen.isBattleScreen == true
+          or type(screen.battle) == "table"
           or (ok and getmetatable(screen) == BattleState)) then
         return true
       end
@@ -156,7 +178,7 @@ return function(mod)
   mod.hooks:wrap("input.step", function(nextFn, game, dt)
     local top = game and game.stack and game.stack:top()
     FlightInput.capture(game and game.input,
-      flying() and top ~= nil and top.isOverworld == true,
+      flying() and (top == nil or top.isOverworld == true),
       function()
         state.landRequest = true
         mod.log:info("landing requested")
@@ -239,17 +261,13 @@ return function(mod)
 
   local function knowsFly(mon) return Sky.knowsMove(mon, "FLY") end
 
-  -- where the sky exists: outside maps, plus Viridian Forest, whose
-  -- canopy reads as open air even though vanilla classes it indoor
-  local function skyAbove(game, mapDef)
+  -- where the sky exists: outside maps, plus forest canopies, which
+  -- read as open air even where the data classes them indoor
+  local function skyAbove(game, mapDef, mapId)
     if not mapDef then return false end
-    local Map = require("src.world.Map")
-    local FieldDefaults = require("src.world.FieldDefaults")
-    if Map.isOutside(mapDef,
-         FieldDefaults.field(game.data, "outsideTilesets")) then
-      return true
-    end
+    if Sky.outsideMap(game.data, mapDef) then return true end
     return mapDef.tileset == "FOREST"
+      or tostring(mapId or ""):find("_FOREST", 1, true) ~= nil
   end
 
   -- HM02 compatibility: the species' tmhm list is the same one the
@@ -292,9 +310,28 @@ return function(mod)
   end
 
   local function badgeOk(game, mon)
-    return not mod.options:get("badges")
-      or (game.save.inventory and game.save.inventory.THUNDERBADGE)
-      or mon.freeFlyGift
+    if not mod.options:get("badges") or mon.freeFlyGift then return true end
+    if GEN2_BOOT then
+      -- Gold gates FLY on Chuck's STORMBADGE; read it the way its own
+      -- field moves do
+      local ok, FieldMoves = pcall(require, "src.world.gen2.FieldMoves")
+      if ok and FieldMoves and FieldMoves.hasBadge then
+        return FieldMoves.hasBadge(game.save, "STORM") == true
+      end
+      return true
+    end
+    return (game.save.inventory ~= nil
+      and game.save.inventory.THUNDERBADGE) and true or false
+  end
+
+  -- riding state is a player field on Gen 1 and world state on Gold
+  local function ridingBike(ow)
+    if Sky.goldWorld(ow) then
+      local ok, FieldMoves = pcall(require, "src.world.gen2.FieldMoves")
+      return (ok and FieldMoves and FieldMoves.isBiking
+        and FieldMoves.isBiking(ow.playerState) == true) == true
+    end
+    return ow ~= nil and ow.player ~= nil and ow.player.onBike == true
   end
 
   local function partyKnowsSurf(save)
@@ -400,8 +437,8 @@ return function(mod)
     local ow = ctx and ctx.overworld
     if not (ow and ow.map and ow.map.def) or flying() then return out end
     if not (eligibleFlyer(game, ow, mon) and badgeOk(game, mon)) then return out end
-    if ow.player and ow.player.onBike then return out end
-    if not skyAbove(game, ow.map.def) then return out end
+    if ridingBike(ow) then return out end
+    if not skyAbove(game, ow.map.def, ow.map.id) then return out end
     table.insert(out, 1, { label = "FREEFLY", onSelect = function(m, g)
       -- a stale entry (menu built before a battle started) must not
       -- unwind the battle screen below it
@@ -486,7 +523,7 @@ return function(mod)
     end,
   })
 
-  mod.content.map_scripts:register("PALLET_TOWN", {
+  if not GEN2_BOOT then mod.content.map_scripts:register("PALLET_TOWN", {
     talk = {
       [GIFT_TEXT] = {
         { "check_flag", GIFT_TAKEN },
@@ -505,7 +542,7 @@ return function(mod)
         { "show_text", "PIDGEOT tilts its\nhead." },
       },
     },
-  })
+  }) end
 
   -- ids of our runtime gift NPCs already living in the map def (the
   -- legacy FREE_FLY_PIDGEY name spans both species):
@@ -573,7 +610,7 @@ return function(mod)
       local ow = mod.world and mod.world:overworld()
       if ow and ow.map and ow.map.def then
         local game = require("src.core.Game")
-        if not skyAbove(game, ow.map.def) then
+        if not skyAbove(game, ow.map.def, ow.map.id) then
           state.phase, state.alt = "idle", 0
           mod.log:info("indoors; flight over")
           emitLanded("indoors", ow.player)
@@ -783,8 +820,12 @@ return function(mod)
       table.insert(ow.entities, r)
     end
 
-    local MapField = require("src.world.FieldDefaults")
-    local MapLoader = require("src.world.MapLoader")
+    local goldBoot = GEN2_BOOT
+
+    local MapField = not goldBoot and require("src.world.FieldDefaults")
+      or nil
+    local MapLoader = not goldBoot and require("src.world.MapLoader")
+      or nil
 
     -- the whole outdoor world is small (36 maps, under a megabyte of
     -- block data, renderers draw windowed), so a flyer keeps ALL of it
@@ -793,14 +834,14 @@ return function(mod)
     -- Seam crossings then never load anything.  Indoor maps keep the
     -- engine's normal LRU.
     local outdoorSet = {}
-    do
+    if not goldBoot then
       local outside = MapField.field(Game.data, "outsideTilesets")
       for id, def in pairs(Game.data.maps) do
         if MapDef.isOutside(def, outside) then outdoorSet[id] = true end
       end
     end
 
-    if not MapLoader.__freeFlyWrapped then
+    if MapLoader and not MapLoader.__freeFlyWrapped then
       MapLoader.__freeFlyWrapped = true
       local origTrim = MapLoader.trim
       MapLoader.trim = function(protected)
@@ -812,7 +853,7 @@ return function(mod)
     -- indoor maps keep their FULL vanilla cache budget: the resident
     -- outdoor world never counts against the engine's cap, and eviction
     -- only happens when indoor maps alone would have exceeded it anyway
-    MapLoader.__freeFlyTrimPolicy = function(protected, origTrim)
+    if MapLoader then MapLoader.__freeFlyTrimPolicy = function(protected, origTrim)
       local indoor = 0
       for id in pairs(Game.data.maps) do
         if not outdoorSet[id] and MapLoader.cached(id) then
@@ -823,11 +864,11 @@ return function(mod)
       protected = protected or {}
       for id in pairs(outdoorSet) do protected[id] = true end
       return origTrim(protected)
-    end
+    end end
 
     state.prefetchQueue = {}
     for id in pairs(outdoorSet) do
-      if not MapLoader.cached(id) then
+      if MapLoader and not MapLoader.cached(id) then
         state.prefetchQueue[#state.prefetchQueue + 1] = id
       end
     end
@@ -851,7 +892,7 @@ return function(mod)
       state.prefetchTick = ((state.prefetchTick or 0) + 1) % 6
       if state.prefetchTick ~= 0 or mesherBusy() then return end
       local id = table.remove(state.prefetchQueue)
-      if not id then return end
+      if not (id and MapLoader) then return end
       local okLoad = pcall(MapLoader.load, Game.data, id)
       if not okLoad then state.prefetchQueue = {} end
     end
@@ -866,10 +907,10 @@ return function(mod)
       if not (save and ow.map and ow.map.def) then
         return false, "Not here."
       end
-      if ow.player.onBike then
+      if ridingBike(ow) then
         return false, "Not while riding\nthe BICYCLE!"
       end
-      if not skyAbove(Game, ow.map.def) then
+      if not skyAbove(Game, ow.map.def, ow.map.id) then
         return false, "There's no open\nsky here!"
       end
       for _, mon in ipairs(save.party or {}) do
@@ -957,7 +998,7 @@ return function(mod)
           and top ~= nil and top.isOverworld
         if takeover then
           local ow = top
-          takeover = ow.map and skyAbove(game, ow.map.def)
+          takeover = ow.map and skyAbove(game, ow.map.def, ow.map.id)
         end
         if not takeover then
           state.qsArmed, state.qsHeld = nil, nil
@@ -1142,6 +1183,9 @@ return function(mod)
     end
 
     local function surfAllowed(ow)
+      -- Gold water landings wait on its surf-state seam; the assisted
+      -- landing glides to dry ground there instead
+      if Sky.goldWorld(ow) then return false end
       return (fieldMoveUser(ow, "SURF") ~= nil or partyKnowsSurf(Game.save))
         and (not mod.options:get("badges")
              or (Game.save.inventory and Game.save.inventory.SOULBADGE))
@@ -1325,6 +1369,7 @@ return function(mod)
       end
       if not flying() then
         if p.freeFlyAlt then p.freeFlyAlt, p.freeFlying = nil, nil end
+        p._stadiumSkyRideLift = nil
         if p.freeFlyWalkSprite then
           p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
         end
@@ -1467,6 +1512,7 @@ return function(mod)
               mod.log:info("landed")
             end
             p.freeFlying, p.freeFlyAlt, p.freeFlyCanLand = nil, nil, nil
+            p._stadiumSkyRideLift = nil
             if p.freeFlyWalkSprite then
               p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
             end
@@ -1644,8 +1690,14 @@ return function(mod)
         p.freeFlyAlt = state.alt
         camLift = state.alt
       end
-      ow.camera:follow(p.px, p.py - camLift,
-                       Game.renderer:worldViewSize())
+      if not Sky.goldWorld(ow) then
+        ow.camera:follow(p.px, p.py - camLift,
+                         Game.renderer:worldViewSize())
+      end
+      -- Stadium 2's Gold voxel worlds read this render-only lift for
+      -- non-mount airborne entities; harmless everywhere else
+      p._stadiumSkyRideLift = (p.freeFlyAlt or 0) > 0
+        and p.freeFlyAlt or nil
       -- the 75-degree orbit, lifted to the rider through the scene's
       -- placed-camera seam (the battle-camera mechanism): same centre,
       -- same pitch, same fov, focus raised to flight height.  Never
@@ -1714,6 +1766,36 @@ return function(mod)
     OC.__freeFlySightGate = function(ow)
       local p = ow.player
       return p and p.freeFlying and not mod.options:get("spotted")
+    end
+
+    if goldBoot then
+      local okW, World2 = pcall(require, "src.world.gen2.World")
+      if okW and World2 and not World2.__freeFlyMoveWrapped then
+        World2.__freeFlyMoveWrapped = true
+        local origWarp = World2.takeWarp
+        World2.takeWarp = function(self, ...)
+          if self.player and self.player.freeFlying then return end
+          return origWarp(self, ...)
+        end
+        local origSight = World2.checkTrainerBattle
+        World2.checkTrainerBattle = function(self, ...)
+          if self.player and self.player.freeFlying
+             and not mod.options:get("spotted") then
+            return
+          end
+          return origSight(self, ...)
+        end
+        local origLedge = World2.tryLedgeJump
+        World2.tryLedgeJump = function(self, ...)
+          if self.player and self.player.freeFlying then return false end
+          return origLedge(self, ...)
+        end
+        local origCarpet = World2.checkCarpetWhileStanding
+        World2.checkCarpetWhileStanding = function(self, ...)
+          if self.player and self.player.freeFlying then return false end
+          return origCarpet(self, ...)
+        end
+      end
     end
 
     local function dangerAllowed(mapId)
@@ -1798,18 +1880,46 @@ return function(mod)
     -- altitude.  While airborne, the only wild battle allowed to start is
     -- one this mod just asked for (interception); everything else is a
     -- ground creature the flyer passes over.
-    local BattleState = require("src.battle.BattleState")
-    if not BattleState.__freeFlyWrapped then
-      BattleState.__freeFlyWrapped = true
-      local origNewWild = BattleState.newWild
-      BattleState.newWild = function(...)
-        local gate = BattleState.__freeFlyGate
-        if gate and gate() then return nil end
-        return origNewWild(...)
+    if goldBoot then
+      -- Gold constructs and pushes a battle in one call; gate the
+      -- World class itself, wild battles only, and answer the way its
+      -- own no-stack refusal does
+      local okW, World2 = pcall(require, "src.world.gen2.World")
+      if okW and World2 then
+        if not World2.__freeFlyWildWrapped then
+          World2.__freeFlyWildWrapped = true
+          local origStart = World2.startBattle
+          World2.startBattle = function(self, opts, onDone)
+            local gate = World2.__freeFlyWildGate
+            if gate and gate(opts) then
+              if onDone then onDone("win") end
+              return false
+            end
+            return origStart(self, opts, onDone)
+          end
+        end
+        World2.__freeFlyWildGate = function(opts)
+          return flying() and not state.expectBattle
+            and type(opts) == "table" and opts.wild ~= nil
+            and opts.trainer == nil
+        end
       end
-    end
-    BattleState.__freeFlyGate = function()
-      return flying() and not state.expectBattle
+    else
+      local installWildGate = function(BS)
+        if not BS.__freeFlyWrapped then
+          BS.__freeFlyWrapped = true
+          local origNewWild = BS.newWild
+          BS.newWild = function(...)
+            local gate = BS.__freeFlyGate
+            if gate and gate() then return nil end
+            return origNewWild(...)
+          end
+        end
+        BS.__freeFlyGate = function()
+          return flying() and not state.expectBattle
+        end
+      end
+      installWildGate(require("src.battle.BattleState"))
     end
 
     mod.events:on("battle.started", function()
@@ -1840,10 +1950,15 @@ return function(mod)
     -- completed-step reactions (locked-door step scripts, gate guards,
     -- spinner tiles, poison ticks) belong to walkers; an airborne step
     -- touches nothing, and landing brings them all straight back
-    if not OC.__freeFlyStepWrapped then
-      OC.__freeFlyStepWrapped = true
-      local origStep = OC.onStepComplete
-      OC.onStepComplete = function(self, ...)
+    -- completed-step reactions are a Gen 1 seam (Gold has none; its
+    -- step effects stay live while airborne for now), so the install
+    -- takes the controller as a plain argument
+    local function installStepGate(controller)
+      if controller.__freeFlyStepWrapped then return end
+      controller.__freeFlyStepWrapped = true
+      local origStep = controller.onStepComplete
+      if not origStep then return end
+      controller.onStepComplete = function(self, ...)
         if self.player and self.player.freeFlying then
           -- the Safari Game's step economy still ticks mid-air (the
           -- FOREST-tileset rule makes its zones flyable, and flight must
@@ -1854,6 +1969,7 @@ return function(mod)
         return origStep(self, ...)
       end
     end
+    if not goldBoot then installStepGate(OC) end
 
     OC.__freeFlyCrossGate2 = function(ow, dir, destMapId)
       if not flying() then return false end
@@ -1965,15 +2081,79 @@ return function(mod)
 
     -- mount identity: the chosen mon's party-icon class maps onto a real
     -- walker sheet where one exists (bird/monster/seel/fairy), sized by
-    -- its dex height.  Icon-only classes keep the bird.
+    -- its dex height.  Icon-only classes keep the bird; on Gold the
+    -- shared resolver deals the species' own art the same way the sky
+    -- birds get theirs.
     state.resolveMount = function(mon)
       state.mountMon = mon
       local species = mon and mon.species
       Player.__freeFlyMount = (species
         and Sky.mountSprite(Game.data, species, "free_fly"))
         or Player.__freeFlyBird
-      Player.__freeFlyMountScale = species
-        and Sky.dexScale(Game.data, species) or 1
+      local sprite = Player.__freeFlyMount
+      Player.__freeFlyMountScale = (sprite and Sky.trueSized(sprite))
+        and 1 or (species and Sky.dexScale(Game.data, species) or 1)
+    end
+
+    -- Gold's player is src.world.gen2.Player, a class the Gen 1 wraps
+    -- above never touch; the same lift and mount composite ride it
+    -- directly.  Gold draws people as draw(self, ox, oy, scale), which
+    -- is the Gen 1 camera math scaled by s, so the flat composite runs
+    -- under one scaled transform.
+    if goldBoot then
+      local okP2, Player2 = pcall(require, "src.world.gen2.Player")
+      if okP2 and Player2 then
+        if not Player2.__freeFlyWrapped then
+          Player2.__freeFlyWrapped = true
+          local origPose = Player2.pose
+          Player2.pose = function(self)
+            local impl = Player2.__freeFlyPoseImpl
+            if impl then return impl(self, origPose) end
+            if origPose then return origPose(self) end
+            return self.sprite, self.px, self.py, self.facing, 0, false
+          end
+          local origDraw = Player2.draw
+          Player2.draw = function(self, ox, oy, sc)
+            local impl = Player2.__freeFlyDrawImpl
+            if impl then return impl(self, ox, oy, sc, origDraw) end
+            return origDraw(self, ox, oy, sc)
+          end
+        end
+        Player2.__freeFlyPoseImpl = function(p, origPose)
+          local sprite, px, py, facing, phase, flip, hop
+          if origPose then
+            sprite, px, py, facing, phase, flip, hop = origPose(p)
+          else
+            sprite, px, py, facing, phase, flip =
+              p.sprite, p.px, p.py, p.facing, 0, false
+          end
+          local lift = p.freeFlyAlt
+          if lift and lift > 0 then
+            py = py - math.floor(lift + 0.5)
+            local mount = Player.__freeFlyMount or Player.__freeFlyBird
+            if mount then
+              sprite = mount
+              phase = math.floor(love.timer.getTime()
+                * (p.freeFlyFlapRate or 8)) % 2
+              flip = false
+            end
+          end
+          return sprite, px, py, facing, phase, flip, hop
+        end
+        Player2.__freeFlyDrawImpl = function(p, ox, oy, sc, origDraw)
+          local lift = p.freeFlyAlt
+          if not (lift and lift > 0) then
+            return origDraw(p, ox, oy, sc)
+          end
+          local G = love.graphics
+          local scale = sc or 1
+          G.push("all")
+          G.scale(scale, scale)
+          Player.__freeFlyDrawImpl(p, -(ox or 0) / scale,
+            -(oy or 0) / scale, origDraw)
+          G.pop()
+        end
+      end
     end
 
     -- crossConnection re-validates the landing tile on the neighbor map
@@ -2124,6 +2304,8 @@ return function(mod)
     PF.__freeFlyEnsureWrap()
     PF.__freeFlyTick = function(game, ow, ...)
       local orig = PF.__freeFlyOrigUpdate
+      -- Gold's own follower engine keeps its ground rules for now
+      if Sky.goldWorld(ow) then return orig(game, ow, ...) end
       local npc = ow and PF.current(ow)
       if not (ow and flying()) then
         if npc then groundFollower(npc) end

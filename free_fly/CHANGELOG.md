@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.6.0
+
+- Gen 2 (Gold) support: the manifest declares `games: [gen1, gen2]`.
+  Core flight works end to end on Gold: the FREEFLY party entry (its
+  party submenu raises the same hook), takeoff, cruising over any
+  terrain, warp/trainer-sight/ledge/forced-movement immunity through
+  Gold's own World class seams, aerial interception of wild_skies
+  flyers, the airborne wild-battle gate riding World:startBattle (Gold
+  has no unpushed-battle factory), and B-to-land with the assisted
+  glide. The badge gate reads Chuck's STORMBADGE the way Gold's own
+  field moves do, and riding state comes from its playerState.
+- The player lift and mount composite ride src.world.gen2.Player
+  directly (Gold's class; the Gen 1 wraps never touch it), drawn under
+  Gold's (ox, oy, scale) convention. Under Stadium 2 voxel worlds the
+  player carries `_stadiumSkyRideLift`, its render-only altitude seam.
+- Deferred on Gold, degrading safely: water landings (the assisted
+  landing glides to dry ground), follower flight dress (Gold's own
+  follower engine keeps its ground rules), completed-step reactions
+  (no seam; spinners and poison stay live mid-air), the camera lift,
+  sea-crossing confirms and story gates (Kanto data, inert), and the
+  Pallet quickstart (its map script has no Gen 2 registry home and is
+  not registered there).
+- Not yet play-tested on a real Gold boot; `modkit gen2check` verdict
+  is "will load but degrade", warnings only.
+
 ## 1.5.5
 
 - Crystal 251 compatibility confirmed and pinned by a regression test:
