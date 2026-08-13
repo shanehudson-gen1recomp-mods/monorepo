@@ -65,6 +65,143 @@ return function(mod)
     return (p and p.freeFlying) and true or false
   end
 
+  -- ---------------------------------------------------------------- Gold
+  -- Gen 2 is a different battle engine (src/battle/gen2), so Gold runs
+  -- its own compact arm and NONE of the Gen 1 machinery below.  The
+  -- shape is the spike's (tests/double_battles_gold_spike_test.lua)
+  -- promoted to runtime: a second wild foe rides the stock 1v1 as an
+  -- extra half-turn through the engine's parameterised damage path,
+  -- and a lead faint promotes the partner so the endgame is vanilla.
+  -- v0 limits, deliberately: no aim menu (your moves hit the lead), a
+  -- thrown ball follows the engine's own single-target rules, and the
+  -- partner acts last in the round.
+  local GEN2_BOOT = (function()
+    local ok, GV = pcall(require, "src.core.GameVersion")
+    if ok and GV and GV.generation and GV.generation() == 2 then
+      return true
+    end
+    -- same probe free_fly boots on: the Gen 2 WorldAPI arm is nil at
+    -- load time and never carries startWildBattle
+    local okW, world = pcall(function() return mod.world end)
+    if not okW then return false end
+    if world == nil then return true end
+    return (type(world) == "table"
+      and world.startWildBattle == nil) == true
+  end)()
+
+  if GEN2_BOOT then
+    -- the partner foe comes from the map's own encounter slots, like
+    -- any other wild; a slotless map sends the lead foe's twin
+    local function goldPartner(game, battle)
+      local ow = Sky.liveOverworld(game)
+        or (game and game.overworld)
+      local slots = ow and ow.map
+        and Sky.grassSlots(game.data, ow.map.id, ow.tod) or {}
+      if #slots > 0 then
+        local s = slots[love.math.random(#slots)]
+        return s.species, s.level
+      end
+      local e = battle.enemy
+      if not (e and e.species) then return nil end
+      return e.species,
+             math.max(2, (e.level or 5) + love.math.random(-2, 2))
+    end
+
+    -- the engine's charge lock first, then a wild pick from the moves
+    -- the engine itself deems usable
+    local function goldPartnerMove(battle, mon)
+      local charged = battle:volatile(mon).chargeMove
+      if charged then return charged end
+      local moves = battle:usableMoves(mon)
+      if #moves == 0 then
+        return require("src.battle.gen2.Battle").STRUGGLE
+      end
+      return moves[love.math.random(#moves)].id
+    end
+
+    local function decorateGold(battle, foe2)
+      battle.enemy2 = foe2
+      battle.__double = true
+
+      -- promotion: when the lead falls and the partner stands, the
+      -- fallen one pays its experience and the partner takes the slot
+      -- BEFORE the vanilla faint pass looks for a winner
+      local origFaints = battle.resolveFaints
+      battle.resolveFaints = function(self)
+        if (self.enemy.hp or 0) <= 0 and self.enemy2
+           and (self.enemy2.hp or 0) > 0 then
+          self:awardExperience(self.enemy)
+          self.enemy = self.enemy2
+          self.enemy2 = nil
+          self.enemyParty = { self.enemy }
+          self.enemyIndex = 1
+          self:syncSides()
+        end
+        return origFaints(self)
+      end
+
+      -- the round: vanilla 1v1 first, then the partner's half-turn.
+      -- A lead faint in the vanilla half already promoted, in which
+      -- case enemy2 is gone and the round is over.
+      local origTake = battle.takeTurn
+      battle.takeTurn = function(self, action)
+        local events = origTake(self, action)
+        if not self.over and self.enemy2 and (self.enemy2.hp or 0) > 0
+           and (self.player.hp or 0) > 0 then
+          self:useMove(self.enemy2, self.player,
+                       goldPartnerMove(self, self.enemy2))
+          self:resolveFaints()
+          -- recoil or Struggle can fell the partner on its own turn;
+          -- it still pays its experience on the way out
+          if self.enemy2 and (self.enemy2.hp or 0) <= 0 then
+            self:awardExperience(self.enemy2)
+            self.enemy2 = nil
+          end
+          for _, e in ipairs(self:takeEvents()) do
+            events[#events + 1] = e
+          end
+        end
+        return events
+      end
+    end
+
+    mod.events:on("battle.started", function(ev)
+      local b = ev and ev.battle
+      if not b or ev.kind ~= "wild" or b.__double then return end
+      if love.math.random() >= doubleChance() then return end
+      local okG, Game = pcall(require, "src.core.Game")
+      if not okG then return end
+      local sp, lv = goldPartner(Game, b)
+      if not sp then return end
+      local Mon = require("src.battle.gen2.Mon")
+      local foe2 = Mon.new(Game.data, sp, lv or 5)
+      if not foe2 then return end
+      decorateGold(b, foe2)
+      mod.log:info("gold wild double: " .. tostring(sp)
+        .. " joins at L" .. tostring(foe2.level))
+    end)
+
+    -- draw-only: the partner's pic beside the lead's box, and its HP
+    -- bar under the enemy HUD.  The pic rides the engine's own
+    -- drawPic (palettes, vanish states), just shifted left.
+    mod.hooks:wrap("battle.overlay", function(next, screen)
+      next(screen)
+      local b = screen and screen.battle
+      local foe2 = b and b.enemy2
+      if not (foe2 and (foe2.hp or 0) > 0) then return end
+      local G = love.graphics
+      G.push("all")
+      G.translate(-52, 10)
+      pcall(screen.drawPic, screen, foe2, false)
+      G.pop()
+      -- side "enemy2" has no displayed-bar state, so the bar reads
+      -- the mon's true hp directly
+      pcall(screen.drawHpBar, screen, foe2, "enemy2", 2, 4)
+    end)
+
+    return
+  end
+
   -- once the doubles roll has passed, a partner ALWAYS joins: whatever
   -- the sources and the encounter list failed to provide (slotless map,
   -- refused species), a stand-in near the lead foe's level fills in

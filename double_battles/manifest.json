@@ -1,7 +1,7 @@
 {
   "id": "double_battles",
   "name": "Double Battles",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "entry": "main.lua",
   "api": 2,
   "category": "MECHANIC",
@@ -13,6 +13,7 @@
     "engine_internals"
   ],
   "affects_link": true,
+  "games": ["gen1", "gen2"],
   "game_version": "0.0.0-dev || >=0.1.0 <2.0.0",
   "description": "Wild and trainer double battles: 1v2, 2v2 and trainer pairs, in classic, wide and 3D.",
   "github": "shanehudson-gen1recomp-mods/double_battles"

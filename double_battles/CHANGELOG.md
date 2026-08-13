@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+- First playable Gen 2 (Gold) arm: wild double battles now work on
+  Gold. A second wild foe from the map's own encounter slots joins
+  the fight, attacks each round with moves the engine's own AI rules
+  allow, and steps up when the lead falls, so every fight still ends
+  the vanilla way. Known limits for now: your moves always hit the
+  lead (no aim menu yet), Poke Balls follow the normal single-target
+  rules, and the partner acts last in the round.
+
 ## 0.5.0
 
 - Second slots are announced: every partner battler (initial pair,
