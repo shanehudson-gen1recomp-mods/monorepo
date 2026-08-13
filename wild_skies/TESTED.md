@@ -1,6 +1,7 @@
 Gen 2 (Gold) support in 1.9.0 is covered by the headless suite and
-`modkit gen2check` only; it has not yet been play-tested on a real
-Gold boot.
+`modkit gen2check`, plus several in-game Gold rounds during
+development (spawning, levels, seams, sprites, battles); a full
+pre-release Gold pass is still recommended.
 
 Third-party mods this release was run alongside, with the exact
 versions used. Later versions of these mods may change behavior; if a
