@@ -15,6 +15,12 @@
   directly (Gold's class; the Gen 1 wraps never touch it), drawn under
   Gold's (ox, oy, scale) convention. Under Stadium 2 voxel worlds the
   player carries `_stadiumSkyRideLift`, its render-only altitude seam.
+- Gold seam crossings carry a flyer anywhere in bounds: tryConnection
+  validates the landing strip tile with isWalkable outside the
+  collision hook, so airborne crossings only worked where a walker
+  could cross; while flying that check now runs in a permissive
+  window (the Gen 1 FreeMove pattern), trees and sea included.
+  Landing rules are unchanged.
 - Deferred on Gold, degrading safely: water landings (the assisted
   landing glides to dry ground), follower flight dress (Gold's own
   follower engine keeps its ground rules), completed-step reactions

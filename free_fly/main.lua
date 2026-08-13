@@ -1980,6 +1980,33 @@ return function(mod)
           if self.player and self.player.freeFlying then return false end
           return origCarpet(self, ...)
         end
+        -- seams: tryConnection validates the landing tile with
+        -- destMap:isWalkable, outside the movement.collision hook, so
+        -- an airborne crossing only worked where a walker could cross.
+        -- While flying the check runs in a permissive window (the same
+        -- pattern the Gen 1 FreeMove wrap uses): any in-bounds strip
+        -- tile carries a flyer, trees and sea included.
+        local origTry = World2.tryConnection
+        World2.tryConnection = function(self, dir)
+          local gate = World2.__freeFlySeamGate
+          if not (gate and gate(self)) then return origTry(self, dir) end
+          local okM, Map2 = pcall(require, "src.world.gen2.Map")
+          if not (okM and Map2 and Map2.isWalkable) then
+            return origTry(self, dir)
+          end
+          local orig = Map2.isWalkable
+          Map2.isWalkable = function(m, x, y) return m:inBounds(x, y) end
+          local ok, crossed = pcall(origTry, self, dir)
+          Map2.isWalkable = orig
+          if not ok then error(crossed, 0) end
+          return crossed
+        end
+      end
+      if okW and World2 then
+        -- outside the once-guard, so a hot reload swaps the gate
+        World2.__freeFlySeamGate = function(world)
+          return world.player ~= nil and world.player.freeFlying == true
+        end
       end
       -- the facade's talkTo seam: Gold consults it before its script
       -- arms, which is what makes a script-less gift NPC answerable.
