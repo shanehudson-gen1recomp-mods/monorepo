@@ -601,9 +601,158 @@ return function(mod)
     mod.log:warn("no free cell for the PALLET_TOWN gift this visit")
   end
 
+  -- ------- the New Bark Town Noctowl: Gold's quick start
+  -- Gold has no map_scripts home, so the gift is a runtime NPC plus
+  -- the world.interacted event, with the ceremony on Gold's own
+  -- showText / askYesNo pair (the cart's yesorno pattern: the choice
+  -- stacks over the standing text box).  The grant uses Gold's own
+  -- Mon factory; the same QUICK START option and the same badge-exempt
+  -- marker apply.
+  local GOLD_GIFT_SPECIES = "NOCTOWL"
+  local GOLD_GIFT_LEVEL = 10
+  local GOLD_GIFT_NAME = "FREE_FLY_GIFT"
+
+  local function goldGiftTaken()
+    return mod.save:get("goldGiftTaken") == true
+  end
+
+  local function goldGiftObjectIds(ow)
+    local ids = {}
+    local def = ow and ow.maps and ow.maps.NEW_BARK_TOWN
+    for _, obj in ipairs((def and def.objects) or {}) do
+      if obj.runtime and obj.name == GOLD_GIFT_NAME then
+        ids[#ids + 1] = "NEW_BARK_TOWN_obj_" .. obj.index
+      end
+    end
+    return ids
+  end
+
+  local function spawnGoldGift()
+    if not GEN2_BOOT then return end
+    local ow = mod.world and mod.world:overworld()
+    if not (ow and ow.map and ow.map.id == "NEW_BARK_TOWN") then return end
+    local wanted = mod.options:get("quickstart") and not goldGiftTaken()
+    -- adopt a survivor from an earlier visit instead of spawning a
+    -- twin; retire it when the gift is taken or the option is off
+    local existing = goldGiftObjectIds(ow)
+    for i = #existing, wanted and 2 or 1, -1 do
+      mod.world:removeNpc(existing[i])
+      table.remove(existing, i)
+    end
+    if existing[1] then
+      state.goldGiftNpcId = existing[1]
+      return
+    end
+    if not wanted then return end
+    local okC, Collision = pcall(require, "src.world.Collision")
+    local spots = { { 8, 9 }, { 7, 9 }, { 9, 9 }, { 8, 10 }, { 7, 10 },
+                    { 9, 10 }, { 6, 9 }, { 10, 9 } }
+    for _, spot in ipairs(spots) do
+      local x, y = spot[1], spot[2]
+      if ow.map:isWalkableCell(x, y)
+         and not (okC and Collision.occupied
+                  and Collision.occupied(ow.entities, x, y, nil)) then
+        state.goldGiftNpcId = mod.world:spawnNpc("NEW_BARK_TOWN", {
+          name = GOLD_GIFT_NAME,
+          sprite = "SPRITE_BIRD",
+          movement = 6,               -- SPRITEMOVEDATA STANDING_DOWN
+          radius = { x = 0, y = 0 },
+          sight = 0,
+          hours = { -1, -1 },         -- visible at any hour
+          eventFlag = 65535,          -- and under no event flag
+          palette = 0, type = 0,
+          x = x, y = y,
+        }) or nil
+        return
+      end
+    end
+    mod.log:warn("no free cell for the NEW_BARK_TOWN gift this visit")
+  end
+
+  local function grantGoldGift(game)
+    local save = game and game.save
+    if not save then return false, "Not now." end
+    save.party = save.party or {}
+    if #save.party >= 6 then
+      return false, "Your party is\nfull!"
+    end
+    local okM, Mon = pcall(require, "src.battle.gen2.Mon")
+    if not (okM and Mon and Mon.new) then return false, "Not now." end
+    local mon = Mon.new(game.data, GOLD_GIFT_SPECIES, GOLD_GIFT_LEVEL,
+                        { happiness = 120 })
+    if not mon then return false, "Not now." end
+    -- marks the gift so the BADGE CHECKS option exempts its flights
+    mon.freeFlyGift = true
+    mon.moves = mon.moves or {}
+    local knows = false
+    for _, mv in ipairs(mon.moves) do
+      if (type(mv) == "table" and mv.id or mv) == "FLY" then
+        knows = true
+      end
+    end
+    if not knows then
+      local flyDef = game.data.moves and game.data.moves.FLY
+      local slot = { id = "FLY", pp = flyDef and flyDef.pp or 15 }
+      if #mon.moves >= 4 then
+        mon.moves[#mon.moves] = slot
+      else
+        table.insert(mon.moves, slot)
+      end
+    end
+    table.insert(save.party, mon)
+    save.pokedex = save.pokedex or { seen = {}, caught = {} }
+    save.pokedex.seen[GOLD_GIFT_SPECIES] = true
+    save.pokedex.caught[GOLD_GIFT_SPECIES] = true
+    return true
+  end
+
+  mod.events:on("world.interacted", function(ev)
+    if not GEN2_BOOT then return end
+    if not (ev and ev.kind == "npc" and ev.mapId == "NEW_BARK_TOWN") then
+      return
+    end
+    local def = ev.target and ev.target.def
+    if not (def and def.name == GOLD_GIFT_NAME) then return end
+    local ow = mod.world and mod.world:overworld()
+    if not (ow and ow.showText and ow.askYesNo) then return end
+    local game = require("src.core.Game")
+    if goldGiftTaken() then
+      ow:showText("NOCTOWL hoots\nsoftly.", function() end)
+      return
+    end
+    ow:showText("The NOCTOWL has\nbeen watching you.\f"
+      .. "It can fly you\nanywhere, badge\for no badge.\nClimb on?",
+      function()
+        ow:askYesNo(function(yes)
+          if not yes then
+            ow:showText("The NOCTOWL\nturns away.", function() end)
+            return
+          end
+          local granted, why = grantGoldGift(game)
+          if not granted then
+            ow:showText(why or "Not now.", function() end)
+            return
+          end
+          mod.save:set("goldGiftTaken", true)
+          pcall(function()
+            require("src.core.Sound").playCry(game.data,
+              GOLD_GIFT_SPECIES)
+          end)
+          ow:showText("NOCTOWL joined\nyour party!\f"
+            .. "Pick FREEFLY in\nits party menu.", function() end)
+          if state.goldGiftNpcId then
+            mod.world:removeNpc(state.goldGiftNpcId)
+            state.goldGiftNpcId = nil
+          end
+        end)
+      end)
+  end)
+
   mod.events:on("map.entered", function(ev)
     state.giftNpcId = nil
+    state.goldGiftNpcId = nil
     if ev and ev.mapId == "PALLET_TOWN" then spawnGift() end
+    if ev and ev.mapId == "NEW_BARK_TOWN" then spawnGoldGift() end
     -- hard guarantee: there is no indoor flight.  Whatever path leads
     -- into a cave or building while airborne, the flight ends on arrival.
     if flying() then
@@ -2417,8 +2566,10 @@ return function(mod)
     migrateGiftMarker()
     mod.events:on("save.loaded", migrateGiftMarker)
 
-    -- a save loaded while already standing in Pallet Town gets its bird too
+    -- a save loaded while already standing in the gift's town gets its
+    -- bird too, on either generation
     spawnGift()
+    spawnGoldGift()
   end)
 
   -- ------- doubles integration (double_battles, when present)

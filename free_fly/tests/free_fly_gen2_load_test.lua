@@ -18,5 +18,11 @@ T.check(api ~= nil, "exports registered")
 T.eq(api.isFlying(), false, "isFlying answers grounded headless")
 T.eq(api.altitude(), 0, "altitude answers zero headless")
 T.eq(api.mount(), nil, "no mount while grounded")
+
+-- the Gold gift listener stays nil-safe with no world up
+run.loader.events:emit("world.interacted",
+  { kind = "npc", mapId = "NEW_BARK_TOWN" })
+run.loader.events:emit("map.entered", { mapId = "NEW_BARK_TOWN" })
+T.eq(#run.errors, 0, "gift seams are nil-safe headless")
 run.release()
 T.finish("free_fly_gen2")

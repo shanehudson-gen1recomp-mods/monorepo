@@ -22,6 +22,13 @@
   sea-crossing confirms and story gates (Kanto data, inert), and the
   Pallet quickstart (its map script has no Gen 2 registry home and is
   not registered there).
+- Gold quick start: a NOCTOWL waits in New Bark Town (same QUICK
+  START option). Gold has no map-script registry for mods, so the
+  bird is a runtime NPC answered through the world.interacted event,
+  with the offer on Gold's own showText / askYesNo pair, the cart's
+  yesorno ceremony, so you still get the choice. Taking it grants a
+  L10 NOCTOWL with FLY, badge-exempt like the Kanto Pidgeot, built by
+  Gold's own Mon factory (gift happiness, dex marked).
 - Not yet play-tested on a real Gold boot; `modkit gen2check` verdict
   is "will load but degrade", warnings only.
 
