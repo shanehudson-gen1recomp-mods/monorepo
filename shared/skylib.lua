@@ -285,6 +285,61 @@ local mountCache = {}
 -- the caller's ladder just falls through.
 local picCache = {}
 
+-- Voxel overworld mods (the Dramatic Shape family) draw each figure as
+-- one flat card UV-mapped to a hard-coded 16x16 window of def.image and
+-- textured with the renderer's resolved image, so a portrait def
+-- pointing at the raw front-pic file shows a corner crop of mostly
+-- background there.  Bake the processed pic down to a real 16x16 file
+-- (box filter, alpha thresholded so the silhouette stays crisp) in the
+-- engine's derived-art root, so the card's window IS the whole image.
+-- Returns the baked love image and its path, or nil wherever the
+-- filesystem or pixel APIs are missing, which keeps the raw-pic def.
+local CARD = 16
+
+local function bakeCardPic(id, size, w, h, species)
+  local fs = love and love.filesystem
+  if not (fs and fs.write and fs.createDirectory) then return nil end
+  local okS, small = pcall(love.image.newImageData, CARD, CARD)
+  if not (okS and small and small.setPixel and small.encode) then
+    return nil
+  end
+  local step = size / CARD
+  local okP = pcall(function()
+    for ty = 0, CARD - 1 do
+      for tx = 0, CARD - 1 do
+        local x0, y0 = math.floor(tx * step), math.floor(ty * step)
+        local x1 = math.max(x0, math.ceil((tx + 1) * step) - 1)
+        local y1 = math.max(y0, math.ceil((ty + 1) * step) - 1)
+        local rs, gs, bs, as, n = 0, 0, 0, 0, 0
+        for y = y0, math.min(y1, h - 1) do
+          for x = x0, math.min(x1, w - 1) do
+            local r, g, b, a = id:getPixel(x, y)
+            rs, gs, bs = rs + r * a, gs + g * a, bs + b * a
+            as, n = as + a, n + 1
+          end
+        end
+        if n > 0 and as / n >= 0.35 then
+          small:setPixel(tx, ty, rs / as, gs / as, bs / as, 1)
+        else
+          small:setPixel(tx, ty, 0, 0, 0, 0)
+        end
+      end
+    end
+  end)
+  if not okP then return nil end
+  local dir = "save/mod-derived/sky_family/pics"
+  local rel = dir .. "/" .. tostring(species):gsub("[^%w_]", "_")
+    .. ".png"
+  local okW = pcall(function()
+    fs.createDirectory(dir)
+    assert(fs.write(rel, small:encode("png")))
+  end)
+  if not okW then return nil end
+  local okI, img = pcall(love.graphics.newImage, small)
+  if not okI then return nil end
+  return img, rel
+end
+
 local function goldPicRenderer(data, species, seedPrefix)
   local mon = data.pokemon and data.pokemon[species]
   local path = mon and mon.spriteFront
@@ -338,30 +393,54 @@ local function goldPicRenderer(data, species, seedPrefix)
   if not okI then return nil end
   local size = (mon.picSize or 0) * 8
   if size < 8 then size = h end
+  local card, cardPath = bakeCardPic(id, size, w, h, species)
   local def = { id = "SKY_PIC_" .. tostring(species), image = path,
                 frames = 1, walker = false, trueColor = true,
                 frameWidth = size, frameHeight = size,
                 spriteType = "POKEMON_PIC", species = species }
   local SpriteRenderer = require("src.render.SpriteRenderer")
-  local okR, renderer = pcall(SpriteRenderer.new, def,
-    (seedPrefix or "shared") .. "_pic_" .. tostring(species))
-  if not (okR and renderer) then return nil end
-  renderer.image = img
+  local seed = (seedPrefix or "shared") .. "_pic_" .. tostring(species)
+  local renderer
+  if card then
+    def.image, def.frameWidth, def.frameHeight = cardPath, CARD, CARD
+    local okR, r = pcall(SpriteRenderer.new, def, seed)
+    -- the def's trueColor makes the baked card the texture a voxel
+    -- pipeline binds, so it must match the def's 16x16 window
+    if okR and r then renderer = r; renderer.image = card end
+  end
+  if not renderer then
+    def.image, def.frameWidth, def.frameHeight = path, size, size
+    card = nil
+    local okR, r = pcall(SpriteRenderer.new, def, seed)
+    if not (okR and r) then return nil end
+    renderer = r
+    renderer.image = img
+  end
   -- overworld-sized: the pic normalises to a 20px creature and the
   -- flyer's own dex scale rides on top at draw; the odd walk phase
-  -- nudges it a pixel for a wingless hover
-  local k = 20 / size
+  -- nudges it a pixel for a wingless hover.  With a baked card the 2D
+  -- draw keeps the full-resolution pic through its own window quad;
+  -- self.image and self.frames stay the card's, sized for 3D.
+  local k, picImage, picQuad = 20 / size, nil, nil
+  if card then
+    local okQ, q = pcall(love.graphics.newQuad, 0, 0, size, size, w, h)
+    if okQ and q then
+      picImage, picQuad = img, q
+    else
+      k = 20 / CARD
+    end
+  end
   renderer.draw = function(self, px, py, camX, camY, facing, walkPhase)
+    local image = picImage or self.image
+    local quad = picQuad or self.frames[0]
     local fx = math.floor(px + 8 - camX)
     local fy = math.floor(py + 12 - camY)
       - ((walkPhase == 1) and 1 or 0)
-    local top = fy - self.frameHeight * k
+    local top = fy - 20
     if facing == "right" then
-      love.graphics.draw(self.image, self.frames[0],
-        fx + self.frameWidth * k / 2, top, 0, -k, k)
+      love.graphics.draw(image, quad, fx + 10, top, 0, -k, k)
     else
-      love.graphics.draw(self.image, self.frames[0],
-        fx - self.frameWidth * k / 2, top, 0, k, k)
+      love.graphics.draw(image, quad, fx - 10, top, 0, k, k)
     end
   end
   picCache[key] = renderer
