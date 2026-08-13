@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.10.0
+
+- SKY DEX: a new START menu entry (Gen 1 and Gold) that pages through
+  every flight-capable species (FLYING types and FLY learners, derived
+  from the live dataset) and shows its flying art under each
+  SKY ART option, animated and at its in-sky dex scale. The AUTO row
+  sits on top, showing exactly what the sky composes by default; a
+  cursor marks the row your current SKY ART setting is flying with,
+  and each row is tagged with what it resolved to (PIC, SHEET, ICON,
+  or a sprite pack's TRUE SIZE art). Up/down pages one species,
+  left/right jumps ten, B closes.
+- With Gen1 Modern UI installed (Gen 1 only), the Sky Dex presents as
+  a Pokedex-style page in the modern theme: species list on the left,
+  the three animated art lanes on the right, with tap targets for rows
+  and back. This rides Modern UI's public apiVersion 2 custom-surface
+  contract; without it (and on Gold, which it will never support) the
+  classic full-screen dex draws as before. The published
+  `gen1ModernUi` contract doubles as the seam a future Gold UI mod
+  could present through.
+- Sky Dex art draws side-on with the flap animation (the pose the sky
+  actually flies in, not the front-standing frame), each lane names
+  where its art came from (a sprite mod's id, or the game's own data),
+  and hold-to-scroll paces in seconds so it matches the engine's list
+  cadence at any frame rate.
+- On a Crystal-shaped Gen 1 boot (gen2-shaped encounter tables, Gen 1
+  icon tables), AUTO sky art now reads bird shapes off the Gen 1 icon
+  class, so Pidgey and friends keep the classic flapping sheet instead
+  of all falling to their portraits.
+
+## 1.9.1
+
+- Portrait flyers no longer garble inside voxel overworld mods (the
+  Dramatic Shape family). Those worlds draw every figure as a flat
+  16x16 card cut from its sprite file, so a portrait pointing at the
+  raw battle pic showed a white corner crop instead of the creature.
+  The processed portrait (background flooded away, species colours)
+  is now also baked down to a real 16x16 image the card reads whole.
+  The flat 2D overworld keeps drawing the full-resolution pic, so
+  nothing changes there, and where baking is not possible (headless,
+  read-only save directory) the old look simply remains.
+
 ## 1.9.0
 
 - Gen 2 (Gold) support: Wild Skies now flies Johto. See the Gen 2

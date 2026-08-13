@@ -351,6 +351,44 @@ return function(mod)
   mod.exports.registerSpriteSource = Sky.registerSpriteSource
   mod.exports.unregisterSpriteSource = Sky.unregisterSpriteSource
 
+  -- ------- sky dex: every species' sky art, browsable from the START
+  -- menu on both generations
+  local SkyDex
+  do
+    local src = mod:read("lib/skydex.lua")
+    if src then
+      local okD, dex = pcall(function()
+        return assert((loadstring or load)(src,
+          "@wild_skies/lib/skydex.lua"))(mod, Sky)
+      end)
+      if okD then
+        SkyDex = dex
+      else
+        mod.log:warn("sky dex unavailable: " .. tostring(dex))
+      end
+    end
+  end
+  if SkyDex then
+    mod.exports.openSkyDex = function(game) return SkyDex.open(game) end
+    mod.exports.skyDexLanes = function(data, species)
+      return SkyDex.lanes(data, species)
+    end
+    -- published at load so Gen1 Modern UI's own adapter scan finds it;
+    -- registerAdapter rides the existing game.ready handler below.  A
+    -- NEW game.ready subscription here would re-sort the emitter's
+    -- equal-priority listener list (table.sort is unstable), and that
+    -- order is what lands the sky-family update wrap after Wilds of
+    -- Kanto's own.
+    mod.exports.gen1ModernUi = SkyDex.modernUiContract()
+    mod.hooks:wrap("ui.start_menu.items", function(next, game, items)
+      local out = next(game, items)
+      if type(out) ~= "table" then return out end
+      mod.ui.insertBefore(out, "QUIT", { label = "SKY DEX",
+        onSelect = function() SkyDex.open(game) end })
+      return out
+    end)
+  end
+
   -- consume the flyer: despawns it and hands back its identity, or nil.
   -- Whoever takes it, the mod.wild_skies.flyer_taken event tells every
   -- observer, so trackers need not know each consumer.
@@ -1983,6 +2021,9 @@ return function(mod)
   mod.events:on("game.ready", function()
     local Game = require("src.core.Game")
     local OC = require("src.world.OverworldController")
+
+    -- Gen1 Modern UI's Sky Dex presentation (no-op when it is absent)
+    if SkyDex then pcall(SkyDex.registerModernUi) end
 
     local bumpCooldown = 0
 

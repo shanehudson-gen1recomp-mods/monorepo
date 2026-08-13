@@ -141,6 +141,54 @@ return function(mod)
 
   local function flying() return state.phase ~= "idle" end
 
+  -- an air sheet is recognized by tag OR by seed: renderers made by a
+  -- pre-fix build carry no tag, but every sky-family renderer is seeded
+  -- free_fly_*/wild_skies_*, so a poisoned session from an older
+  -- version still heals.  The engine's own player sheets seed "player",
+  -- and foreign mods' swaps are left alone.
+  local function isAirSheet(s)
+    if type(s) ~= "table" then return false end
+    if rawget(s, "__freeFlyAirSheet") then return true end
+    local seed = rawget(s, "seed")
+    return type(seed) == "string"
+      and (seed:find("^free_fly") ~= nil
+           or seed:find("^wild_skies") ~= nil)
+  end
+
+  -- the player's true walking sheet, rebuilt from the same data
+  -- Player.new reads: the recovery when a lost session (hot reload, a
+  -- mod update mid-flight) left an air sheet on the player with no
+  -- clean stash to restore from.  Gold's player carries its own
+  -- spriteDef; the Gen 1 player resolves through field defaults.
+  local function rebuildWalkSprite(p)
+    local ok, sprite = pcall(function()
+      local SpriteRenderer = require("src.render.SpriteRenderer")
+      if p and p.spriteDef then
+        return SpriteRenderer.new(p.spriteDef, "player")
+      end
+      local Game = require("src.core.Game")
+      local FieldDefaults = require("src.world.FieldDefaults")
+      local walkId = FieldDefaults.fieldValue(Game.data,
+        "playerSprites", "walk")
+      return SpriteRenderer.new(Game.data.sprites[walkId], "player")
+    end)
+    return ok and sprite or nil
+  end
+
+  -- landing/idle restore: never put an air sheet back on the player.
+  -- A poisoned stash (a pre-guard session stashed the mount itself) is
+  -- discarded and the real walking sheet rebuilt; a bare air sheet
+  -- with no stash at all heals the same way.
+  local function restoreWalkSprite(p)
+    local walk = p.freeFlyWalkSprite or state.walkSprite
+    if isAirSheet(walk) then walk = rebuildWalkSprite(p) end
+    if not walk and isAirSheet(p.sprite) then
+      walk = rebuildWalkSprite(p)
+    end
+    if walk and p.sprite ~= walk then p.sprite = walk end
+    p.freeFlyWalkSprite, state.walkSprite = nil, nil
+  end
+
   -- Dramatic Shape's maintained/original build and the battle-art fork expose
   -- the same public library seam under different mod ids.  Resolving only the
   -- original id leaves movement permissive but drops every visual half of
@@ -376,8 +424,11 @@ return function(mod)
     -- stash the walking sheet HERE, before any mount swap can touch
     -- it: a stash taken mid-tick can capture a mount sheet after a
     -- hot reload or a foreign sprite swap, and then a landing walks
-    -- the player around wearing the bird
-    state.walkSprite = ow.player.sprite
+    -- the player around wearing the bird.  A sprite that already IS
+    -- one of our air sheets (a lost session left the mount on) would
+    -- poison the stash the same way, so rebuild the real sheet instead
+    state.walkSprite = not isAirSheet(ow.player.sprite)
+      and ow.player.sprite or rebuildWalkSprite(ow.player)
     if state.resolveMount then state.resolveMount(mon) end
     -- taking off from a surf dismounts into the air
     ow.player.surfing = nil
@@ -1650,9 +1701,7 @@ return function(mod)
         if Sky.goldWorld(ow) and ow.camera then
           ow.camera.__freeFlyLift = 0
         end
-        local walk = p.freeFlyWalkSprite or state.walkSprite
-        if walk and p.sprite ~= walk then p.sprite = walk end
-        p.freeFlyWalkSprite, state.walkSprite = nil, nil
+        restoreWalkSprite(p)
         if state.placedCam and state.v3dRef
            and state.v3dRef.camera == state.placedCam then
           state.v3dRef.camera = nil
@@ -1779,7 +1828,13 @@ return function(mod)
       -- walking sheet is stashed for the rider overlay and the landing
       local mount = Player.__freeFlyMount or Player.__freeFlyBird
       if mount and p.sprite ~= mount then
-        p.freeFlyWalkSprite = p.freeFlyWalkSprite or p.sprite
+        if not p.freeFlyWalkSprite then
+          -- never stash one of our own air sheets (a stale mount from
+          -- a lost session): landing would restore the wrong figure
+          -- forever after
+          p.freeFlyWalkSprite = not isAirSheet(p.sprite) and p.sprite
+            or rebuildWalkSprite(p)
+        end
         p.sprite = mount
       end
       syncRider(ow, p)
@@ -1873,9 +1928,7 @@ return function(mod)
             end
             p.freeFlying, p.freeFlyAlt, p.freeFlyCanLand = nil, nil, nil
             p._stadiumSkyRideLift = nil
-            local walk = p.freeFlyWalkSprite or state.walkSprite
-            if walk then p.sprite = walk end
-            p.freeFlyWalkSprite, state.walkSprite = nil, nil
+            restoreWalkSprite(p)
             rebuildConvoyAfterLanding(Game, ow, function()
               syncWildsFollowers(false)
             end)
@@ -2508,6 +2561,7 @@ return function(mod)
     if Game.data.sprites.SPRITE_BIRD then
       Player.__freeFlyBird = SpriteRenderer.new(Game.data.sprites.SPRITE_BIRD,
                                                 "free_fly_mount")
+      Player.__freeFlyBird.__freeFlyAirSheet = true
     end
 
     -- mount identity: the chosen mon's party-icon class maps onto a real
@@ -2521,6 +2575,9 @@ return function(mod)
       Player.__freeFlyMount = (species
         and Sky.mountSprite(Game.data, species, "free_fly"))
         or Player.__freeFlyBird
+      if Player.__freeFlyMount then
+        Player.__freeFlyMount.__freeFlyAirSheet = true
+      end
       local sprite = Player.__freeFlyMount
       Player.__freeFlyMountScale = (sprite and Sky.trueSized(sprite))
         and 1 or (species and Sky.dexScale(Game.data, species) or 1)
