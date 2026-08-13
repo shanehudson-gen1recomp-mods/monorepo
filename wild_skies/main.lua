@@ -558,6 +558,13 @@ return function(mod)
           end
         end
       end
+      if goldGround == false then
+        mod.log:info("no voxel shape profile exported; Gold birds keep "
+          .. "to street perches (a shape-profile mod like Stadium 2 "
+          .. "must be enabled for rooftops)")
+      else
+        mod.log:info("rooftop perching armed via the voxel shape profile")
+      end
     end
     if not goldGround then return nil end
     local ts = map.tileset
@@ -570,7 +577,17 @@ return function(mod)
       end
     end
     local ok, h = pcall(goldGround.scene.groundAt, map, cx, cy)
-    if not ok or type(h) ~= "number" or h < 16 then return nil end
+    if not ok then
+      -- say it once: a silent nil here made rooftop failures
+      -- indistinguishable from an absent profile in play-testing
+      if not goldGround.warned then
+        goldGround.warned = true
+        mod.log:warn("rooftop probe failed (%s); street perches only",
+          tostring(h))
+      end
+      return nil
+    end
+    if type(h) ~= "number" or h < 16 then return nil end
     return h
   end
 
