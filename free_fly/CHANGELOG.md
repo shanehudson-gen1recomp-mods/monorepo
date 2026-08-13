@@ -2,6 +2,11 @@
 
 ## 1.6.0
 
+- The walking sheet is stashed at TAKEOFF, before any mount swap can
+  touch it, and landings restore from that stash even when the
+  per-tick one was lost, so the player can never keep walking around
+  wearing the mount's art.
+
 - Gen 2 (Gold) support: the manifest declares `games: [gen1, gen2]`.
   Core flight works end to end on Gold: the FREEFLY party entry (its
   party submenu raises the same hook), takeoff, cruising over any

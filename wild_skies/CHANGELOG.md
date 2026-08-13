@@ -66,6 +66,12 @@
   portraits Crystal 251 extracts for its species. PORTRAIT and
   CLASSIC force one look for everything; CLASSIC is exactly the old
   Gen 1 appearance. The option re-dresses airborne birds live.
+- Borrowed art fails closed: a def coming back from a sprite
+  provider must name our species (species, padded dex, or id echo in
+  its path) and must not be a fallback placeholder, or the borrow is
+  refused. Older provider builds can answer a failed resolution with
+  another species' sheet, and a wrong-species bird is worse than the
+  generic one.
 - Wilds of Kanto's per-species HGSS land sheets now dress birds that
   have no in-air art (the same sheets its own wilds wear and Dramatic
   Sky Ride's mounts fly on), resolved through WoK's own bind pipeline

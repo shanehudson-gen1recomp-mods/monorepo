@@ -143,8 +143,30 @@ function Sky.bindPipelineDef(render, game, species, dex)
           and type(entity.sprite.def) == "table") then
     return nil
   end
+  -- fail closed on anything that is not clearly OUR species' art: a
+  -- provider that fell back to placeholder art says so on the entity,
+  -- and a real per-species sheet names its species or padded dex in
+  -- the path.  Older provider builds can answer a failed resolution
+  -- with another species' sheet; a wrong-species mount is worse than
+  -- the generic one.
+  if entity.spriteFallbackStep ~= nil then return nil end
+  local meta = entity.spriteProviderMeta
+  if type(meta) == "table" and meta.fallbackUsed == true then
+    return nil
+  end
   local def = entity.sprite.def
   if type(def.image) ~= "string" then return nil end
+  local path = def.image:lower()
+  if path:find("fallback", 1, true) or path:find("missing", 1, true) then
+    return nil
+  end
+  local named = path:find(tostring(species):lower():gsub("_", ""), 1,
+    true) ~= nil
+  local byDex = dex ~= nil
+    and path:find(string.format("%03d", dex), 1, true) ~= nil
+  local byId = type(def.id) == "string"
+    and def.id:lower():find(tostring(species):lower(), 1, true) ~= nil
+  if not (named or byDex or byId) then return nil end
   return def
 end
 

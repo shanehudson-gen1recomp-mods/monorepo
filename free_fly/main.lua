@@ -373,6 +373,11 @@ return function(mod)
     state.phase, state.alt, state.bob = "rising", 0, 0
     -- wild flyers climb on a diagonal; so does the mount
     state.riseGlide = 2
+    -- stash the walking sheet HERE, before any mount swap can touch
+    -- it: a stash taken mid-tick can capture a mount sheet after a
+    -- hot reload or a foreign sprite swap, and then a landing walks
+    -- the player around wearing the bird
+    state.walkSprite = ow.player.sprite
     if state.resolveMount then state.resolveMount(mon) end
     -- taking off from a surf dismounts into the air
     ow.player.surfing = nil
@@ -1590,9 +1595,9 @@ return function(mod)
         if Sky.goldWorld(ow) and ow.camera then
           ow.camera.__freeFlyLift = 0
         end
-        if p.freeFlyWalkSprite then
-          p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
-        end
+        local walk = p.freeFlyWalkSprite or state.walkSprite
+        if walk and p.sprite ~= walk then p.sprite = walk end
+        p.freeFlyWalkSprite, state.walkSprite = nil, nil
         if state.placedCam and state.v3dRef
            and state.v3dRef.camera == state.placedCam then
           state.v3dRef.camera = nil
@@ -1813,9 +1818,9 @@ return function(mod)
             end
             p.freeFlying, p.freeFlyAlt, p.freeFlyCanLand = nil, nil, nil
             p._stadiumSkyRideLift = nil
-            if p.freeFlyWalkSprite then
-              p.sprite, p.freeFlyWalkSprite = p.freeFlyWalkSprite, nil
-            end
+            local walk = p.freeFlyWalkSprite or state.walkSprite
+            if walk then p.sprite = walk end
+            p.freeFlyWalkSprite, state.walkSprite = nil, nil
             rebuildConvoyAfterLanding(Game, ow, function()
               syncWildsFollowers(false)
             end)
