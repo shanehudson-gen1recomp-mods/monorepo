@@ -2,6 +2,14 @@
 
 ## 1.9.0
 
+- Gen 2 (Gold) support: Wild Skies now flies Johto. See the Gen 2
+  bullets below for what the Gold sky does.
+- Recommended companion: Wilds of Kanto 2.0.0 or newer. Older 1.x
+  builds cap their art at dex 151, so Johto species could borrow the
+  wrong sheet; this release refuses wrong-species art outright, and
+  free_fly 1.6.0 dresses old-WoK followers correctly until you
+  update.
+
 - Seam-neighbor skies are pre-populated on the engine's ghost surface and
   retain their displayed positions when promoted to the current map. Each
   connected outdoor map keeps its own bounded resident flock; doors and other

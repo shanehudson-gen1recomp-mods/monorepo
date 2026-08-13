@@ -2,6 +2,14 @@
 
 ## 1.6.0
 
+- Gen 2 (Gold) support: Free Fly now flies Johto. See the Gen 2
+  bullets below for the full Gold feature set.
+- Recommended companion: Wilds of Kanto 2.0.0 or newer for the best
+  sprite work (True Size geometry and per-species HGSS art are
+  consumed automatically). Older 1.x builds are handled: their
+  dex-151 art cap made Johto followers walk as the wrong species,
+  and this release dresses them correctly until you update.
+
 - Old Wilds of Kanto compatibility: 1.x builds cap follower art at
   dex 151, so a Crystal 251 lead (Cyndaquil and friends) walked as a
   wrapped Kanto species. Until the player updates, those followers
