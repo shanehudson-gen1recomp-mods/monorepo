@@ -48,6 +48,14 @@ for mod in "${mods[@]}"; do
   notes="Download the .zip and install it from the game: MODS > Import mod .zip. Installed copies pick up new releases through the game's mod manager.
 
 Source: https://github.com/$ORG/monorepo (development happens in the monorepo; this repo hosts releases)."
+  # the mod's own changelog section for this release leads the notes,
+  # so headline features (a new generation, a companion-mod version)
+  # reach players without archaeology through commit subjects
+  highlights="$(awk '/^## /{n++} n==1' "$ROOT/$mod/CHANGELOG.md" | tail -n +2 | head -80 || true)"
+  if [ -n "$highlights" ]; then
+    notes+=$'\n\n## Highlights\n'"$highlights"
+  fi
+
   if [ -n "$changes" ]; then
     notes+=$'\n\n## Changes\n\n'"$changes"
   fi
