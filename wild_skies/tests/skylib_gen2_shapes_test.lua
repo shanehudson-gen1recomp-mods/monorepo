@@ -267,6 +267,25 @@ T.eq(Sky.mountSprite(gen1Pic, "PIDGEY", "t13").def.image, "gen1_bird.png",
 T.eq(Sky.mountSprite(gen1Pic, "SCYTHER", "t14",
        { skyArt = "classic" }).def.image, "gen1_mon.png",
      "gen 1 CLASSIC keeps the class sheets")
+
+-- a Crystal-shaped Gen 1 boot: gen2-shaped encounters but only the
+-- Gen 1 icon tables.  AUTO must read bird shapes off the Gen 1 class
+-- instead of dressing every bird in its portrait
+local crystalData = {
+  encounters = gold.encounters,
+  icons = { byDex = { [16] = "BIRD" } },
+  pokemon = { PIDGEY = { dex = 16,
+                         spriteFront = "battle/front/pidgey.png",
+                         picSize = 1 } },
+  gen2Icons = { species = {}, icons = {} },
+  gen2Palettes = { tag = "gold-palettes" },
+  sprites = { SPRITE_BIRD = { id = "SPRITE_BIRD",
+                              image = "gold_bird.png",
+                              frames = 6, walker = true } },
+}
+T.eq(Sky.mountSprite(crystalData, "PIDGEY", "t15").def.image,
+     "gold_bird.png",
+     "a Crystal-shaped boot keeps Gen 1 bird classes flapping on AUTO")
 _G.love = savedLove
 T.eq(grid[0][0][4], 0, "background white floods to transparent")
 T.eq(grid[3][3][4], 1, "body white survives the flood")

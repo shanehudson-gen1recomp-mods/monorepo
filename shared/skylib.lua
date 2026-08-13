@@ -254,6 +254,9 @@ local function borrowedSprite(data, species, dex, seedPrefix)
             local dry = splashFreeImage(def.image)
             if dry then renderer.image = dry end
           end
+          if okR and renderer then
+            renderer.skySource = tostring(source.mod or source.id)
+          end
           sourceCache[key] = okR and renderer or false
         end
         if sourceCache[key] then return sourceCache[key] end
@@ -271,6 +274,16 @@ function Sky.spriteSourceChanged(payload)
     if source.mod == id or source.id == id then return true end
   end
   return false
+end
+
+-- where a piece of art came from, for the Sky Dex's provenance line: a
+-- path under a mod's derived-file home or a mods folder names the mod,
+-- anything else is the game's own imported data
+function Sky.artSource(path)
+  if type(path) ~= "string" then return "game" end
+  return path:match("mod%-derived/([^/]+)")
+    or path:match("^mods/([^/]+)")
+    or "game"
 end
 
 local mountCache = {}
@@ -416,6 +429,9 @@ local function goldPicRenderer(data, species, seedPrefix)
     renderer = r
     renderer.image = img
   end
+  -- provenance reads off the ORIGINAL pic path: the baked card under
+  -- sky_family is our derivation, not where the art came from
+  renderer.skySource = Sky.artSource(path)
   -- overworld-sized: the pic normalises to a 20px creature and the
   -- flyer's own dex scale rides on top at draw; the odd walk phase
   -- nudges it a pixel for a wingless hover.  With a baked card the 2D
@@ -478,13 +494,19 @@ function Sky.mountSprite(data, species, seedPrefix, opts)
     local icons = data.gen2Icons
     local iconId = icons and icons.species and icons.species[species]
     local ownDef = sprites["SPRITE_" .. tostring(species)]
+    -- bird-shaped by the gen2 icon table, or by the Gen 1 icon class
+    -- when that table is silent: a Crystal-shaped Gen 1 boot has
+    -- gen2-shaped encounters but only the Gen 1 icons, and its Pidgey
+    -- must keep the flapping sheet under AUTO exactly like vanilla
+    local birdShape = iconId == "ICON_BIRD"
+      or (iconId == nil and class == "BIRD")
     local preferPic
     if skyArt == "portrait" then
       preferPic = ownDef == nil
     elseif skyArt == "classic" then
       preferPic = false
     else
-      preferPic = ownDef == nil and iconId ~= "ICON_BIRD"
+      preferPic = ownDef == nil and not birdShape
     end
     if preferPic then
       local pic = goldPicRenderer(data, species, seedPrefix)
@@ -534,6 +556,9 @@ function Sky.mountSprite(data, species, seedPrefix, opts)
     local SpriteRenderer = require("src.render.SpriteRenderer")
     local okR, renderer = pcall(SpriteRenderer.new, def,
       (seedPrefix or "shared") .. "_" .. spriteId)
+    if okR and renderer then
+      renderer.skySource = Sky.artSource(def.image)
+    end
     mountCache[key] = okR and renderer or false
     -- the species' own shipped colours (its battle-pic pair) make
     -- Gold's shared sheets read per-species instead of engine red
