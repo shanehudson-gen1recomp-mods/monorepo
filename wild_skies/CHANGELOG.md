@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.1
+
+- Compatible with the engine's new mod sandbox (the grandmas-kitchen
+  security work). The voxel portrait cards no longer touch the
+  filesystem at all: the baked 16x16 card lives in memory and a shared
+  wrap on the engine's Assets.image serves it to every consumer (the
+  Dramatic Shape family's card builders included) under a virtual
+  path. Works identically on engines from before the sandbox.
+
 ## 1.10.0
 
 - SKY DEX: a new START menu entry (Gen 1 and Gold) that pages through

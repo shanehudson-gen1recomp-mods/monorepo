@@ -302,20 +302,45 @@ local picCache = {}
 -- one flat card UV-mapped to a hard-coded 16x16 window of def.image and
 -- textured with the renderer's resolved image, so a portrait def
 -- pointing at the raw front-pic file shows a corner crop of mostly
--- background there.  Bake the processed pic down to a real 16x16 file
--- (box filter, alpha thresholded so the silhouette stays crisp) in the
--- engine's derived-art root, so the card's window IS the whole image.
--- Returns the baked love image and its path, or nil wherever the
--- filesystem or pixel APIs are missing, which keeps the raw-pic def.
+-- background there.  Bake the processed pic down to a real 16x16 image
+-- (box filter, alpha thresholded so the silhouette stays crisp), so the
+-- card's window IS the whole image.
+--
+-- The baked card never touches the filesystem: the mod sandbox has no
+-- runtime write an engine-side reader could see (love.filesystem is a
+-- rerouted compat shim there), and none is needed.  Every consumer of
+-- def.image -- the voxel families' card builders, SpriteRenderer itself
+-- -- resolves through the engine's Assets.image choke point, so a wrap
+-- there serves our cards from memory under virtual paths and hands
+-- every other path straight on.  One wrap and one registry are shared
+-- by every sky-family mod's copy of this library.
 local CARD = 16
+local CARD_PREFIX = "sky_family/card/"
+
+local function registerCard(rel, image)
+  local okA, Assets = pcall(require, "src.render.Assets")
+  if not (okA and type(Assets) == "table"
+          and type(Assets.image) == "function") then
+    return false
+  end
+  local cards = Assets.__skyFamilyCards
+  if not cards then
+    cards = {}
+    Assets.__skyFamilyCards = cards
+    local origImage = Assets.image
+    Assets.image = function(path, ...)
+      local card = cards[path]
+      if card then return card end
+      return origImage(path, ...)
+    end
+  end
+  cards[rel] = image
+  return true
+end
 
 local function bakeCardPic(id, size, w, h, species)
-  local fs = love and love.filesystem
-  if not (fs and fs.write and fs.createDirectory) then return nil end
   local okS, small = pcall(love.image.newImageData, CARD, CARD)
-  if not (okS and small and small.setPixel and small.encode) then
-    return nil
-  end
+  if not (okS and small and small.setPixel) then return nil end
   local step = size / CARD
   local okP = pcall(function()
     for ty = 0, CARD - 1 do
@@ -340,16 +365,11 @@ local function bakeCardPic(id, size, w, h, species)
     end
   end)
   if not okP then return nil end
-  local dir = "save/mod-derived/sky_family/pics"
-  local rel = dir .. "/" .. tostring(species):gsub("[^%w_]", "_")
-    .. ".png"
-  local okW = pcall(function()
-    fs.createDirectory(dir)
-    assert(fs.write(rel, small:encode("png")))
-  end)
-  if not okW then return nil end
   local okI, img = pcall(love.graphics.newImage, small)
   if not okI then return nil end
+  local rel = CARD_PREFIX .. tostring(species):gsub("[^%w_]", "_")
+    .. ".png"
+  if not registerCard(rel, img) then return nil end
   return img, rel
 end
 
