@@ -1281,6 +1281,15 @@ return function(mod)
       facing = f.facing, mode = f.mode, perchAlt = f.perchAlt, t = f.t or 0,
       vx = f.vx or 0, vy = f.vy or 0,
       mapW = f.mapW, mapH = f.mapH,
+      -- the engine's ghost rows are built from live npcs, which always
+      -- carry cell coordinates; every consumer is entitled to the same
+      -- here ON THE INJECTION FRAME.  The voxel families' capture reads
+      -- ghost cellX for the ground lookup before our update has ever
+      -- run, throws on nil, and their pipelines latch to 2D on the
+      -- first failed frame -- the "Wild Skies breaks voxel on every
+      -- screen transition" report.
+      cellX = math.floor(((f.px or 0) + 8) / 16),
+      cellY = math.floor(((f.py or 0) + 8) / 16),
     }, Flyer)
     ghost.update = function(self)
       local dt = residentGhostDt
