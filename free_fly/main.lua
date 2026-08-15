@@ -970,6 +970,11 @@ return function(mod)
     local OC = require("src.world.OverworldController")
     local Collision = require("src.world.Collision")
     local MapDef = require("src.world.Map")
+    -- required once here for every reader below: the mod sandbox has no
+    -- package.loaded, so the tick reads this binding instead of probing
+    -- the module registry (on Gold the require resolves through the same
+    -- compat facade it always did)
+    local PF = require("src.world.PikachuFollower")
 
     -- per-frame flight state, called from the guarded update wrap below
     local Pipelines = require("src.render.Pipelines")
@@ -1646,9 +1651,7 @@ return function(mod)
           "free_fly_compat")
         if sprite then npc.sprite = sprite end
       end
-      -- the follower module the same way the tick reaches it: the
-      -- local PF binding lives later in this file
-      local PFmod = package.loaded["src.world.PikachuFollower"]
+      local PFmod = PF
       local npc = PFmod and PFmod.current and PFmod.current(ow) or nil
       if npc then
         local species
@@ -1677,7 +1680,7 @@ return function(mod)
       -- the follower gate on PF.update gets clobbered by the same
       -- foreign restores as OC.update; re-arm it from here, since this
       -- tick itself rides the healed wrap
-      local PFmod = package.loaded["src.world.PikachuFollower"]
+      local PFmod = PF
       local ensurePF = PFmod and PFmod.__freeFlyEnsureWrap
       if ensurePF then ensurePF() end
       local p = ow.player
@@ -2665,7 +2668,6 @@ return function(mod)
     -- A FLYING-type follower now trails through the air a little below
     -- the mount; any other follower sits the flight out and walks back in
     -- through the engine's own mid-map respawn path on landing.
-    local PF = require("src.world.PikachuFollower")
 
     local function followerMon(game)
       local pokepc = mod.find("PokePCFollowers_VoxelMerge")

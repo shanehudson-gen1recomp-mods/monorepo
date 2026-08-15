@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.2
+
+- Compatible with the engine's new mod sandbox (the grandmas-kitchen
+  security work): the follower module is reached through require
+  instead of the module registry the sandbox removed, and the shared
+  sky library's voxel card bake no longer needs a filesystem (see
+  Wild Skies 1.10.1). No behavior change on older engines.
+
 ## 1.6.1
 
 - The player can no longer get stuck walking around in the mount's

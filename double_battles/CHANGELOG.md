@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- Ships the sandbox-compatible shared sky library (see Wild Skies
+  1.10.1): no filesystem use, so the engine's new mod sandbox (the
+  grandmas-kitchen security work) has nothing to reroute. No behavior
+  change.
+
 ## 0.5.0
 
 - Second slots are announced: every partner battler (initial pair,
