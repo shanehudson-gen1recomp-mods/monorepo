@@ -7,12 +7,15 @@ layout and Dramatic Shape's 3D battle modes.
 > **3D battles:** with Dramatic Shape or the Battle Art voxel fork
 > installed, both Pokémon on each side stand together on the arena,
 > the aim frame blinks on the mon you're targeting, and the HUD
-> follows whoever is acting. On the
-> STADIUM rungs a side showing two Pokémon rides the flat battle cards
-> (the 3D models pose one mon a side); the models return the moment
-> that side is back down to one. Camera mods that ride Dramatic
-> Shape's battle camera (Battle Cinematics, for example) frame the
-> same scene and need nothing extra.
+> follows whoever is acting. On the STADIUM rungs the partner stands
+> as its own 3D model beside the lead's: it plays its own moves,
+> entrances and faints, throws its own shadow, and on STADIUM B the
+> discs widen to fit the pair. A partner whose species has no Stadium
+> pack (or a substitute, or a transform) drops that side back to the
+> flat battle cards, per side, exactly the way the mode itself falls
+> back one Pokémon at a time. Camera mods that ride Dramatic Shape's
+> battle camera (Battle Cinematics, for example) frame the same scene
+> and need nothing extra.
 
 Turn it on in Mod Settings: WILD DOUBLES set to SOMETIMES (about 30% of
 wild encounters) or ALWAYS. A second foe from the map's own encounter

@@ -121,5 +121,36 @@ T.eq(d.__dbPendingBall, nil, "no prompt when only one foe is up")
 drain(d)
 T.check(direct, "collapsed battles throw straight through")
 
+-- ------- a catch no longer ends the double: the survivor fights on
+
+T.eq(api.startWildDouble("SPEAROW", 8, "ZUBAT", 8), true, "double up")
+local e = pushed
+local eLead, ePartner = e.enemy, e.enemy2
+local partySize = #fakeGame.save.party
+local finished
+e.onFinish = function(result) finished = result end
+local origCA = e.catchAttempt
+e.catchAttempt = function(self, ball, rate)
+  origCA(self, ball, rate)
+  return true, 3
+end
+e:throwBall("POKE_BALL")
+press(e, "right")
+press(e, "a")
+drain(e)
+T.eq(#fakeGame.save.party, partySize + 1,
+  "the caught partner joined the party")
+T.eq(fakeGame.save.party[partySize + 1].species, ePartner.mon.species,
+  "and it is the aimed foe")
+T.eq(finished, nil, "the battle did not finish")
+T.check(e.result == nil, "no caught result latched")
+T.eq(e.afterQueue, "menu", "play returns to the menu")
+T.eq(e.enemy, eLead, "the surviving foe holds the lead slot")
+T.eq(e.enemy2, nil, "alone")
+T.eq(e.enemy.dbAnchor, 1, "in the vanilla spot for the 1v1 endgame")
+T.eq(e.enemyHidden, false, "the survivor's pic is shown")
+T.eq(e.lockedBall, nil, "the resting ball left with the caught mon")
+e.onFinish = nil
+
 run.release()
 T.finish("double_battles_ball")

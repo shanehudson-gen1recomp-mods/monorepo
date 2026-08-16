@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.7.0
+
+- STADIUM doubles: on the 3D model rungs the partner now stands as its
+  own Stadium model beside the lead's instead of dropping the side to
+  flat cards. Partner moves resolve to the species' own move animation,
+  send-outs play the entrance, faints wait for the HP bar and then hold
+  the collapse to its end, shadows are cast, and STADIUM B's discs
+  widen to fit the pair. Wired by probing the fork's public Stadium
+  surface (Stadium/StadiumMon/StadiumPack), never by mod name, so
+  Dramatic Shape and Dramaless both get it and the Battle Art fork
+  (which has no Stadium) keeps the composed cards.
+- Per-side fallback ladder: a partner with no Stadium pack, a
+  substitute, a transform, or a model that fails to build drops only
+  that side to the composed pair of cards; the other side keeps its
+  models. Fixed alongside: on the card tier the lead's model now
+  stands down for the frame (previously the model and the composed
+  cards could draw on the same cell).
+- Robust to wiring order: the mode's begin runs while the battle is
+  staged, which can be before the adapter installs (it hooks in off
+  the battle-started event). Pair state is keyed on the battle itself
+  and the arena is fetched live off `OverworldBattle.arena()`, so the
+  models cover from the first battle on instead of the composed cards
+  sitting in front of them.
+- Catching one of two wild Pokémon no longer ends the battle. The
+  caught mon rides the whole vanilla pipeline (storage, dex page,
+  nickname), then the survivor steps into the vanilla slot and the
+  fight goes on; the ball spent the turn, so the survivor gets its
+  free move, exactly like a missed throw.
+- Doubled battles paint the battlers over the scene: the mode draws
+  each side's card as geometry in the world, and a doubled side's
+  wider card could end up inside arena scenery (a partner half-buried
+  in a boulder). While a double is live the card draw runs with the
+  depth test forced to "always" AND its written depth pulled most of
+  the way to the camera (bounded by the real eye distance), so both
+  mons stand in front of the scene whichever order the world drew in;
+  screen position, shadows, and depth-write state are untouched, and
+  single battles keep the mode's honest occlusion.
+- Battle Art's animated species art now reaches the partner slots:
+  the fork animates by reassigning the two vanilla slots' sprites each
+  frame, so partners froze on their ROM pics while the leads animated.
+  The adapter hands the partner slots to the fork's own public update
+  through a proxy battle, so both mons on a side animate from the same
+  atlases. Probed by surface (AnimatedBattleArt), inert on OG Dramatic
+  Shape and Dramaless, which ship no animated art.
+
 ## 0.6.0
 
 - TRAINER PAIRS: two unfought trainers standing side by side now fight

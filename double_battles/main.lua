@@ -719,6 +719,20 @@ return function(mod)
     -- it stands at the partner spot suppresses vanilla's lead-anchored
     -- draw for the duration of the call and is drawn at its spot here.
     local origPics = battle.drawPicsLayer
+    -- resolved PER CALL off the class, never the capture above: a scene
+    -- mod (Dramaless) wraps BattleState.drawPicsLayer lazily, AFTER
+    -- this instance wrap captured the method -- so the capture can be
+    -- the vanilla pics with none of the mode's own suppression, and
+    -- delegating to it painted both lead sprites flat over the standing
+    -- models.  The live class slot always carries the full chain.
+    local function livePics(self, ...)
+      local okB, BS = pcall(require, "src.battle.BattleState")
+      local class = okB and BS and BS.drawPicsLayer
+      if type(class) == "function" and class ~= self.drawPicsLayer then
+        return class(self, ...)
+      end
+      return origPics(self, ...)
+    end
     battle.drawPicsLayer = function(self, slide, sx, sy, onlySide,
                                     skipMenuClip)
       -- a scene owner (Dramatic Shape's 3D rungs, a cinematic camera)
@@ -726,7 +740,7 @@ return function(mod)
       -- double every sprite, so the flat draw stands down and the
       -- scene adapter (lib/dramatic_shape.lua for DS) stages both
       if sceneActive(self) then
-        return origPics(self, slide, sx, sy, onlySide, skipMenuClip)
+        return livePics(self, slide, sx, sy, onlySide, skipMenuClip)
       end
       -- the HUD borrow (battle.draw) swaps slots for the frame; the
       -- pics unswap for their portion so sprites never move or morph
@@ -741,7 +755,7 @@ return function(mod)
       local prevE, prevP = self.enemySendingOut, self.sendingOut
       if eAway then self.enemySendingOut = true end
       if pAway then self.sendingOut = true end
-      local okO, errO = pcall(origPics, self, slide, sx, sy, onlySide,
+      local okO, errO = pcall(livePics, self, slide, sx, sy, onlySide,
                               skipMenuClip)
       self.enemySendingOut, self.sendingOut = prevE, prevP
       if not okO then error(errO) end
@@ -1531,6 +1545,47 @@ return function(mod)
       self.phase = "menu"
     end
 
+    -- catching one of two wild foes used to end the battle (the other
+    -- fled).  Now the survivor stays: the caught mon rides the whole
+    -- vanilla pipeline out of the lead slot (the aim commit put it
+    -- there -- storage, dex, nickname all untouched), then the partner
+    -- promotes the way a lead faint promotes and the fight goes on.
+    -- The ball spent the turn, so the survivor takes its free move,
+    -- exactly like a missed throw.
+    local origStore = battle.storeCaughtMon
+    if type(origStore) == "function" then
+      battle.storeCaughtMon = function(self)
+        origStore(self)
+        if not (self.kind == "wild" and alive(self.enemy2)) then return end
+        self.result = nil
+        self.afterQueue = "menu"
+        self:act(function()
+          -- the capture chain hid the lead pic and parked the closed
+          -- ball on screen; both belong to the mon that just left
+          self.enemyHidden = false
+          self.lockedBall = nil
+          local Runtime = require("src.mods.Runtime")
+          local previous = self.enemy
+          self.enemy = self.enemy2
+          self.enemy2 = nil
+          self.enemy.dbAnchor = 1
+          self:syncSides()
+          self:markParticipant()
+          Runtime.emit("battle.battler_switched", {
+            battle = self, side = self.sides[2], battler = self.enemy,
+            previous = previous,
+          })
+          self:sayNext(Strings("Wild %s is\nstill in the fight!",
+                               self.enemy.name))
+        end)
+        self:act(function()
+          self:executeAction(self.enemy, self.player, self:enemyAction())
+        end)
+        self:queueResidual(self.player, self.enemy)
+        self:act(function() self:endOfTurn() end)
+      end
+    end
+
     -- the db_target phase: LEFT/RIGHT swap foes, A locks in, B backs
     -- out to the move menu; everything else stays vanilla
     local origUpdate = battle.update
@@ -1735,6 +1790,10 @@ return function(mod)
   -- like the FIGHT menu, in classic, wide and 3D alike (the classic UI
   -- canvas rides into the 3D letterbox, so the box lands where every
   -- other battle menu does there).
+  -- assigned once the scene adapter loader below exists: the aim frame
+  -- on the model tier rings the projected 3D model, not the 2D card
+  local sceneAimRect
+
   local function drawAimMenu(battle, first, second, aimed)
     pcall(function()
       if (first.dbAnchor or 1) == 2 then first, second = second, first end
@@ -1766,13 +1825,23 @@ return function(mod)
       end
       -- the aimed foe holds the lead slot while the prompt is up; the
       -- frame still lands on its sprite because foeRect keys off the
-      -- battler's own sticky anchor, not the slot
-      if not scene and aimed
-         and math.floor(love.timer.getTime() * 4) % 2 == 0 then
-        local tx, ty, tw = foeRect(battle, aimed)
-        love.graphics.setColor(1, 0.2, 0.2, 1)
-        love.graphics.rectangle("line", tx, ty, tw, tw)
-        love.graphics.setColor(1, 1, 1, 1)
+      -- battler's own sticky anchor, not the slot.  On the model tier
+      -- the frame rings the projected 3D model instead of the card.
+      if aimed and math.floor(love.timer.getTime() * 4) % 2 == 0 then
+        local tx, ty, tw, th
+        if scene then
+          if sceneAimRect then
+            tx, ty, tw, th = sceneAimRect(battle, aimed)
+          end
+        else
+          tx, ty, tw = foeRect(battle, aimed)
+          th = tw
+        end
+        if tx then
+          love.graphics.setColor(1, 0.2, 0.2, 1)
+          love.graphics.rectangle("line", tx, ty, tw, th)
+          love.graphics.setColor(1, 1, 1, 1)
+        end
       end
     end
     if battle.phase == "db_switch_target" then
@@ -1782,12 +1851,21 @@ return function(mod)
       end
       -- same cue on your own side: the frame marks the mon about to
       -- step back for the bench pick
-      if not scene and aimed
-         and math.floor(love.timer.getTime() * 4) % 2 == 0 then
-        local tx, ty, tw = allyRect(battle, aimed)
-        love.graphics.setColor(0.2, 1, 0.4, 1)
-        love.graphics.rectangle("line", tx, ty, tw, tw)
-        love.graphics.setColor(1, 1, 1, 1)
+      if aimed and math.floor(love.timer.getTime() * 4) % 2 == 0 then
+        local tx, ty, tw, th
+        if scene then
+          if sceneAimRect then
+            tx, ty, tw, th = sceneAimRect(battle, aimed)
+          end
+        else
+          tx, ty, tw = allyRect(battle, aimed)
+          th = tw
+        end
+        if tx then
+          love.graphics.setColor(0.2, 1, 0.4, 1)
+          love.graphics.rectangle("line", tx, ty, tw, th)
+          love.graphics.setColor(1, 1, 1, 1)
+        end
       end
     end
   end)
@@ -1899,7 +1977,8 @@ return function(mod)
     end)
     if ok and type(factory) == "function" then
       local okA, adapter = pcall(factory,
-        { log = mod.log, alive = alive })
+        { log = mod.log, alive = alive,
+          registerSceneDetector = mod.exports.registerSceneDetector })
       if okA and type(adapter) == "table" then sceneAdapter = adapter end
     end
     if sceneAdapter == false then
@@ -1907,6 +1986,14 @@ return function(mod)
         .. "3D doubles fall back to the single-mon scene")
     end
     return sceneAdapter
+  end
+
+  sceneAimRect = function(battle, battler)
+    local a = loadSceneAdapter()
+    if not (a and type(a.aimRect) == "function") then return nil end
+    local ok, x, y, w, h = pcall(a.aimRect, battle, battler)
+    if ok and type(x) == "number" then return x, y, w, h end
+    return nil
   end
 
   -- our own broadcast channel: trackers see doubles without touching

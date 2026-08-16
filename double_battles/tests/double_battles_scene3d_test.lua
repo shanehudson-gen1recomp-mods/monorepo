@@ -200,5 +200,97 @@ T.check(ls ~= nil, "survivor drawn")
 T.eq(ls.x, 36 - ls.w * ls.sc / 2, "at the partner column it stood on")
 b.enemy.dbAnchor = 1
 
+-- ------- Battle Art's animated species art reaches the partner slots
+--
+-- The fork animates by reassigning battler.sprite each frame, lead
+-- slots only.  The adapter hands the partner slots to the same public
+-- update through a proxy battle: enemy/player ARE the partners, an
+-- absent partner is false (nil would fall through to the real lead
+-- and tick it twice), and the trainer-art arms are held inert.
+local animSeen
+local fakeAnim = { update = function(proxy, dt)
+  animSeen = { proxy = proxy, dt = dt }
+end }
+local fakeOv3 = {
+  sideTexture = function() return origSideResult end,
+  hudTexture = function() return "hud-layer" end,
+  textures = function() return {} end,
+}
+local depthDuringDraw, pullDuringDraw
+local fakeBb
+fakeBb = { PULL = 1.5, draw = function()
+  local test = love.graphics.getDepthMode()
+  depthDuringDraw = test
+  pullDuringDraw = fakeBb.PULL
+  return true
+end }
+local fakeV3d = { eye = { 0, 40, 120 } }
+fakeGame.mods.exports.BATTLE_ART = { lib = { require = function(name)
+  if name == "OverworldBattle" then return fakeOv3 end
+  if name == "AnimatedBattleArt" then return fakeAnim end
+  if name == "BattleBillboard" then return fakeBb end
+  if name == "Voxel3D" then return fakeV3d end
+  error("unexpected module " .. tostring(name))
+end } }
+local g = love.graphics
+local savedGet, savedSet = g.getDepthMode, g.setDepthMode
+local depthTest, depthWrite = "lequal", true
+g.getDepthMode = function() return depthTest, depthWrite end
+g.setDepthMode = function(test, write)
+  depthTest, depthWrite = test, write
+end
+T.eq(adapter.tryInstall(), true, "battle-art fork wires too")
+
+T.eq(api.startWildDouble("SPEAROW", 8, "ZUBAT", 8), true,
+  "second double pushed")
+local b2 = pushed
+b2.picImage = b.picImage
+b2.drawBattlerPic = function() end
+fakeOv3.sideTexture(b2, "enemy")
+T.check(animSeen ~= nil, "the animated-art update ran for a double")
+T.eq(animSeen.proxy.enemy, b2.enemy2,
+  "the proxy's enemy slot IS the partner")
+T.eq(animSeen.proxy.player, b2.player2,
+  "and the player slot IS your partner")
+b2.player2 = nil
+fakeOv3.sideTexture(b2, "enemy")
+T.eq(animSeen.proxy.player, false,
+  "an absent partner is false, never the real lead")
+T.check(animSeen.proxy.player ~= b2.player,
+  "so the lead is never ticked twice")
+T.eq(animSeen.proxy.playerBackPic, false,
+  "the trainer-art arm is held inert")
+T.eq(animSeen.proxy.data, b2.data,
+  "everything else reads through to the real battle")
+
+-- ------- doubled battles paint the cards over the scene
+--
+-- The mode's cards are geometry in the world, so scenery can cut into
+-- a doubled side's wider card.  While a double is live the card draw
+-- runs with the depth test forced to "always"; depth writes and the
+-- state around the draw are untouched, and singles keep the mode's
+-- honest occlusion.
+fakeOv3.sideTexture(b2, "enemy")
+depthDuringDraw, pullDuringDraw = nil, nil
+T.eq(fakeBb.draw(nil, 0, 0, 0), true, "wrapped card draw still draws")
+T.eq(depthDuringDraw, "always",
+  "a live double paints the card over the scene")
+T.check(pullDuringDraw and pullDuringDraw > 90,
+  "and the card's depth pulls most of the way to the eye")
+T.eq(depthTest, "lequal", "the depth mode is restored after the draw")
+T.eq(depthWrite, true, "and depth writes were never touched")
+T.eq(fakeBb.PULL, 1.5, "the mode's own pull is restored after the draw")
+
+animSeen = nil
+fakeOv3.sideTexture({}, "enemy")
+T.check(animSeen == nil, "a non-double battle never ticks partner art")
+depthDuringDraw, pullDuringDraw = nil, nil
+fakeBb.draw(nil, 0, 0, 0)
+T.eq(depthDuringDraw, "lequal",
+  "with no live double the card keeps honest occlusion")
+T.eq(pullDuringDraw, 1.5, "and the mode's own pull")
+
+g.getDepthMode, g.setDepthMode = savedGet, savedSet
+
 run.release()
 T.finish("double_battles_scene3d")
