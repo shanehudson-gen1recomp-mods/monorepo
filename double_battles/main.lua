@@ -719,6 +719,20 @@ return function(mod)
     -- it stands at the partner spot suppresses vanilla's lead-anchored
     -- draw for the duration of the call and is drawn at its spot here.
     local origPics = battle.drawPicsLayer
+    -- resolved PER CALL off the class, never the capture above: a scene
+    -- mod (Dramaless) wraps BattleState.drawPicsLayer lazily, AFTER
+    -- this instance wrap captured the method -- so the capture can be
+    -- the vanilla pics with none of the mode's own suppression, and
+    -- delegating to it painted both lead sprites flat over the standing
+    -- models.  The live class slot always carries the full chain.
+    local function livePics(self, ...)
+      local okB, BS = pcall(require, "src.battle.BattleState")
+      local class = okB and BS and BS.drawPicsLayer
+      if type(class) == "function" and class ~= self.drawPicsLayer then
+        return class(self, ...)
+      end
+      return origPics(self, ...)
+    end
     battle.drawPicsLayer = function(self, slide, sx, sy, onlySide,
                                     skipMenuClip)
       -- a scene owner (Dramatic Shape's 3D rungs, a cinematic camera)
@@ -726,7 +740,7 @@ return function(mod)
       -- double every sprite, so the flat draw stands down and the
       -- scene adapter (lib/dramatic_shape.lua for DS) stages both
       if sceneActive(self) then
-        return origPics(self, slide, sx, sy, onlySide, skipMenuClip)
+        return livePics(self, slide, sx, sy, onlySide, skipMenuClip)
       end
       -- the HUD borrow (battle.draw) swaps slots for the frame; the
       -- pics unswap for their portion so sprites never move or morph
@@ -741,7 +755,7 @@ return function(mod)
       local prevE, prevP = self.enemySendingOut, self.sendingOut
       if eAway then self.enemySendingOut = true end
       if pAway then self.sendingOut = true end
-      local okO, errO = pcall(origPics, self, slide, sx, sy, onlySide,
+      local okO, errO = pcall(livePics, self, slide, sx, sy, onlySide,
                               skipMenuClip)
       self.enemySendingOut, self.sendingOut = prevE, prevP
       if not okO then error(errO) end
