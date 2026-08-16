@@ -1065,6 +1065,21 @@ return function(env)
         end
       end
     end
+    -- the mode's own live answer for "does the 3D scene own this
+    -- battle": shot() is what the dramaticShapeShot stamp copies, read
+    -- at the source instead of trusting the stamp's write timing.  On
+    -- every rung that stages the fight (2D-3D A/B, STADIUM A/B) this
+    -- answers non-nil and the flat 2D sprites stand down; a battle the
+    -- mode passes on (no stage on this map) keeps the flat draw.
+    if env.registerSceneDetector and type(ov.shot) == "function" then
+      pcall(env.registerSceneDetector, {
+        id = "double_battles_scene_shot",
+        active = function()
+          local okS, shot = pcall(ov.shot)
+          return okS and shot ~= nil
+        end,
+      })
+    end
     wired[ov] = true
   end
 

@@ -1963,7 +1963,8 @@ return function(mod)
     end)
     if ok and type(factory) == "function" then
       local okA, adapter = pcall(factory,
-        { log = mod.log, alive = alive })
+        { log = mod.log, alive = alive,
+          registerSceneDetector = mod.exports.registerSceneDetector })
       if okA and type(adapter) == "table" then sceneAdapter = adapter end
     end
     if sceneAdapter == false then
