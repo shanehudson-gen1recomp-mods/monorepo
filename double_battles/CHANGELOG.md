@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.6.0
+
+- TRAINER PAIRS: two unfought trainers standing side by side now fight
+  you together as a real pair, no companion mod needed (the gen 3
+  convention; new option, on by default). PAIR DISTANCE sets how far
+  apart they can stand and still count as together (touching, 2 or 3
+  cells; touching by default). Story battles never pair:
+  anything with a scripted victory reward (badges, prizes, staged
+  scenes) is excluded on both sides, derived from the dataset, and
+  vetoes cover the auto-pair the way they cover wild doubles. A pair
+  win beats both trainers, defeat flags and event flags included.
+  Trainer classes AUTHORED by another mod (AI Rivals' walking rivals)
+  are theirs alone: their duels stay 1v1 and their characters are
+  never conscripted as partners, unless the owning mod opts in through
+  a pair source, which always takes precedence over local pairing.
+- New public seams for trainer mods (AI Rivals and friends):
+  `buildingPairSide()` is truthy while the side-B party build runs
+  through the engine's trainer path (so a mod tracking "the battle
+  about to start" can stand down for the filler build),
+  `pairInfo(battle)` names both classes and whether trainer B has
+  taken over, `battle.dbOriginalTrainer` preserves the opening
+  trainer's record through the takeover, and
+  `mod.double_battles.pair_decorated` announces a formed pair.
+  `battle.oppClass` keeps trainer A's class for the whole battle.
+
 ## 0.5.1
 
 - Ships the sandbox-compatible shared sky library (see Wild Skies
