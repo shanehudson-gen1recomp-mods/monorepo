@@ -375,35 +375,48 @@ return function(env)
     return a, b, false
   end
 
+  -- covers with the slots already in anchor order: the original reads
+  -- the LEAD slot to match its standing model, and it is called from
+  -- the mode's draw while the HUD borrow has a partner in that slot --
+  -- unnormalised, every partner action flickered the side to cards
+  local function coversNormalized(St, battle, side)
+    local partner
+    if side == "enemy" then
+      partner = battle.enemy2
+    else
+      partner = battle.player2
+    end
+    local s = St.__doubleBattlesPairState
+    if partner and env.alive(partner) then
+      -- the models stand only while the partner has one of its own
+      -- ready (pair state below); otherwise the side rides the
+      -- composed cards, and forks without the Stadium family always do
+      local res = false
+      if s and s.covering and s.covering[side] then
+        res = St.__doubleBattlesOrigCovers(battle, side) and true
+          or false
+      end
+      if s and s.coversLead then s.coversLead[side] = res end
+      return res
+    end
+    local res = St.__doubleBattlesOrigCovers(battle, side)
+    if s and s.coversLead then
+      s.coversLead[side] = res and true or false
+    end
+    return res
+  end
+
   local function makeCoversHook(St)
     return function(battle, side)
       if battle and battle.__double then
-        local partner
-        if side == "enemy" then
-          local _, p2 = anchorOrder(battle.enemy, battle.enemy2)
-          partner = p2
-        elseif side == "player" then
-          local _, p2 = anchorOrder(battle.player, battle.player2)
-          partner = p2
-        end
-        local s = St.__doubleBattlesPairState
-        if partner and env.alive(partner) then
-          -- the models stand only while the partner has one of its own
-          -- ready (pair state below); otherwise the side rides the
-          -- composed cards, and forks without the Stadium family always
-          -- do
-          local res = false
-          if s and s.covering and s.covering[side] then
-            res = St.__doubleBattlesOrigCovers(battle, side) and true
-              or false
-          end
-          if s and s.coversLead then s.coversLead[side] = res end
-          return res
-        end
-        local res = St.__doubleBattlesOrigCovers(battle, side)
-        if s and s.coversLead then
-          s.coversLead[side] = res and true or false
-        end
+        local eA, eB, eSw = anchorOrder(battle.enemy, battle.enemy2)
+        local pA, pB, pSw = anchorOrder(battle.player, battle.player2)
+        if eSw then battle.enemy, battle.enemy2 = eA, eB end
+        if pSw then battle.player, battle.player2 = pA, pB end
+        local ok, res = pcall(coversNormalized, St, battle, side)
+        if eSw then battle.enemy, battle.enemy2 = eB, eA end
+        if pSw then battle.player, battle.player2 = pB, pA end
+        if not ok then error(res, 0) end
         return res
       end
       return St.__doubleBattlesOrigCovers(battle, side)
