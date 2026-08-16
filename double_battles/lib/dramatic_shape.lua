@@ -114,6 +114,61 @@ return function(env)
     pcall(Anim.update, proxy, dt)
   end
 
+  -- The mode draws each side's card as geometry INSIDE the world, so
+  -- arena scenery can cut into it -- honest occlusion, and the right
+  -- call for a single mon standing on its own cell.  A doubled side's
+  -- card is wider than the cell the mode chose for one mon, so the
+  -- partner half can end up inside a boulder.  While a double is live,
+  -- the card draw runs with the depth TEST forced to "always": the
+  -- battlers paint over the scene (screen position untouched -- the
+  -- projection is unchanged), depth writes stay as they were so the
+  -- fork's depth-reading passes still see the card where it stands,
+  -- and the shadow pass is a separate draw that keeps real geometry.
+  local liveDouble = setmetatable({}, { __mode = "v" })
+  local function noteLiveBattle(battle)
+    if battle and battle.__double and not battle.dead then
+      liveDouble[1] = battle
+    elseif liveDouble[1] ~= nil and battle ~= nil
+       and battle ~= liveDouble[1] then
+      liveDouble[1] = nil
+    end
+  end
+  local function doubleIsLive()
+    local b = liveDouble[1]
+    return b ~= nil and b.__double and not b.dead
+  end
+  local function wrapCardDraw(bb)
+    if type(bb) ~= "table" or type(bb.draw) ~= "function" then return end
+    if bb.__doubleBattlesOrigDraw then
+      return -- hot reload: the wrap below reads state through upvalues
+             -- refreshed per generation, nothing to re-point
+    end
+    bb.__doubleBattlesOrigDraw = bb.draw
+    bb.draw = function(...)
+      local hook = bb.__doubleBattlesDrawHook
+      if hook then return hook(...) end
+      return bb.__doubleBattlesOrigDraw(...)
+    end
+  end
+  local function makeCardDrawHook(bb)
+    return function(...)
+      if not doubleIsLive() then
+        return bb.__doubleBattlesOrigDraw(...)
+      end
+      local g = love and love.graphics
+      if not (g and g.getDepthMode and g.setDepthMode) then
+        return bb.__doubleBattlesOrigDraw(...)
+      end
+      local okG, prevTest, prevWrite = pcall(g.getDepthMode)
+      if not okG then return bb.__doubleBattlesOrigDraw(...) end
+      pcall(g.setDepthMode, "always", prevWrite)
+      local ok, result = pcall(bb.__doubleBattlesOrigDraw, ...)
+      pcall(g.setDepthMode, prevTest, prevWrite)
+      if not ok then error(result, 0) end
+      return result
+    end
+  end
+
   -- the blinking aim frame, around whichever battler the prompt aims at
   local function drawCue(battle, side, drawn)
     local aimed, color
@@ -137,6 +192,7 @@ return function(env)
   local function makeSideTextureHook(Ov, St, Anim)
     return function(battle, side)
       local orig = Ov.__doubleBattlesOrigSideTexture
+      noteLiveBattle(battle)
       if not (battle and battle.__double) then return orig(battle, side) end
       tickPartnerArt(Anim, battle)
       -- the intro trainer frames belong to the original whole: it hangs
@@ -811,8 +867,15 @@ return function(env)
              and type(a.update) == "function" then
             anim = a
           end
+          -- the card draw, for the doubled-side depth override
+          local bb
+          local okB, bbMod = pcall(V.require, "BattleBillboard")
+          if okB and type(bbMod) == "table"
+             and type(bbMod.draw) == "function" then
+            bb = bbMod
+          end
           found[#found + 1] = { ov = ov, st = st, pair = pair,
-                                anim = anim }
+                                anim = anim, bb = bb }
         end
       end
     end
@@ -864,7 +927,7 @@ return function(env)
     end
   end
 
-  local function wire(ov, st, pair, anim)
+  local function wire(ov, st, pair, anim, bb)
     if not ov.__doubleBattlesOrigSideTexture then
       ov.__doubleBattlesOrigSideTexture = ov.sideTexture
       ov.sideTexture = function(battle, side)
@@ -883,6 +946,10 @@ return function(env)
     end
     ov.__doubleBattlesSideTextureHook = makeSideTextureHook(ov, st, anim)
     ov.__doubleBattlesHudTextureHook = makeHudTextureHook(ov)
+    if bb then
+      wrapCardDraw(bb)
+      bb.__doubleBattlesDrawHook = makeCardDrawHook(bb)
+    end
     if st then
       if not st.__doubleBattlesOrigCovers then
         st.__doubleBattlesOrigCovers = st.covers
@@ -916,7 +983,7 @@ return function(env)
   function adapter.tryInstall()
     local found = locateAll()
     for _, f in ipairs(found) do
-      if not wired[f.ov] then wire(f.ov, f.st, f.pair, f.anim) end
+      if not wired[f.ov] then wire(f.ov, f.st, f.pair, f.anim, f.bb) end
     end
     if #found > 0 then installed = true end
     return installed

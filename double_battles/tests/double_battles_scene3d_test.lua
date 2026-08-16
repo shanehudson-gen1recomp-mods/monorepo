@@ -216,11 +216,25 @@ local fakeOv3 = {
   hudTexture = function() return "hud-layer" end,
   textures = function() return {} end,
 }
+local depthDuringDraw
+local fakeBb = { PULL = 1.5, draw = function()
+  local test = love.graphics.getDepthMode()
+  depthDuringDraw = test
+  return true
+end }
 fakeGame.mods.exports.BATTLE_ART = { lib = { require = function(name)
   if name == "OverworldBattle" then return fakeOv3 end
   if name == "AnimatedBattleArt" then return fakeAnim end
+  if name == "BattleBillboard" then return fakeBb end
   error("unexpected module " .. tostring(name))
 end } }
+local g = love.graphics
+local savedGet, savedSet = g.getDepthMode, g.setDepthMode
+local depthTest, depthWrite = "lequal", true
+g.getDepthMode = function() return depthTest, depthWrite end
+g.setDepthMode = function(test, write)
+  depthTest, depthWrite = test, write
+end
 T.eq(adapter.tryInstall(), true, "battle-art fork wires too")
 
 T.eq(api.startWildDouble("SPEAROW", 8, "ZUBAT", 8), true,
@@ -245,9 +259,30 @@ T.eq(animSeen.proxy.playerBackPic, false,
 T.eq(animSeen.proxy.data, b2.data,
   "everything else reads through to the real battle")
 
+-- ------- doubled battles paint the cards over the scene
+--
+-- The mode's cards are geometry in the world, so scenery can cut into
+-- a doubled side's wider card.  While a double is live the card draw
+-- runs with the depth test forced to "always"; depth writes and the
+-- state around the draw are untouched, and singles keep the mode's
+-- honest occlusion.
+fakeOv3.sideTexture(b2, "enemy")
+depthDuringDraw = nil
+T.eq(fakeBb.draw(), true, "wrapped card draw still draws")
+T.eq(depthDuringDraw, "always",
+  "a live double paints the card over the scene")
+T.eq(depthTest, "lequal", "the depth mode is restored after the draw")
+T.eq(depthWrite, true, "and depth writes were never touched")
+
 animSeen = nil
 fakeOv3.sideTexture({}, "enemy")
 T.check(animSeen == nil, "a non-double battle never ticks partner art")
+depthDuringDraw = nil
+fakeBb.draw()
+T.eq(depthDuringDraw, "lequal",
+  "with no live double the card keeps honest occlusion")
+
+g.getDepthMode, g.setDepthMode = savedGet, savedSet
 
 run.release()
 T.finish("double_battles_scene3d")
