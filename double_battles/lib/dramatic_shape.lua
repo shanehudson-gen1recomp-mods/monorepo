@@ -363,14 +363,28 @@ return function(env)
     end
   end
 
+  -- lead and partner by their STICKY anchors, whatever the slot fields
+  -- hold right now: the HUD borrow and the aim swap put a partner in
+  -- the lead field for stretches of frames, and anything keyed off the
+  -- raw slots trades identities right along with it -- the "partners
+  -- swapping places" play-test report
+  local function anchorOrder(a, b)
+    if a and b and (a.dbAnchor or 1) == 2 and (b.dbAnchor or 1) ~= 2 then
+      return b, a, true
+    end
+    return a, b, false
+  end
+
   local function makeCoversHook(St)
     return function(battle, side)
       if battle and battle.__double then
         local partner
         if side == "enemy" then
-          partner = battle.enemy2
+          local _, p2 = anchorOrder(battle.enemy, battle.enemy2)
+          partner = p2
         elseif side == "player" then
-          partner = battle.player2
+          local _, p2 = anchorOrder(battle.player, battle.player2)
+          partner = p2
         end
         local s = St.__doubleBattlesPairState
         if partner and env.alive(partner) then
@@ -629,6 +643,19 @@ return function(env)
       end
       s.groundY = groundY or s.groundY or 0
 
+      -- the whole model pass -- the mode's own update included -- runs
+      -- with the slots in anchor order, so neither the mode's lead
+      -- model nor the partner models ever see a borrowed arrangement;
+      -- the swap is put back untouched afterwards
+      local eA, eB, eSw = anchorOrder(battle.enemy, battle.enemy2)
+      local pA, pB, pSw = anchorOrder(battle.player, battle.player2)
+      if eSw then battle.enemy, battle.enemy2 = eA, eB end
+      if pSw then battle.player, battle.player2 = pA, pB end
+      local function restoreSlots()
+        if eSw then battle.enemy, battle.enemy2 = eB, eA end
+        if pSw then battle.player, battle.player2 = pB, pA end
+      end
+
       -- which tier each side rides this frame, decided BEFORE the
       -- original runs so the borrow can hide the lead's model in the
       -- same update that needs it hidden
@@ -723,7 +750,10 @@ return function(env)
       if borrow.player then
         battle.showPlayerBack, battle.playerBackPic = savedSP, savedBP
       end
-      if not okU then error(errU) end
+      if not okU then
+        restoreSlots()
+        error(errU)
+      end
 
       -- and the partners themselves: requests, visibility, pose
       local arena = s.arena
@@ -769,10 +799,15 @@ return function(env)
                                     or function() end, side)
               if okF and type(fp) == "number" then leadR = fp end
               local selfR = mon:worldRadius() or 0
-              local d = math.max(16, leadR + selfR + 6)
+              -- generous floor and padding: the play test had partner
+              -- and lead half-overlapped when a footprint came back
+              -- small, and standing apart reads better than touching
+              local d = math.max(24, leadR + selfR + 10)
               s.spacing[side] = d
               local x = cell[1] + px * d
               local z = cell[2] + pz * d
+              s.pos = s.pos or {}
+              s.pos[side] = { x, z }
               mon.model_matrix = mon:matrix(x, s.groundY, z,
                                             other[1] - x, other[2] - z)
               mon:build()
@@ -781,6 +816,7 @@ return function(env)
           end
         end
       end
+      restoreSlots()
     end
   end
 
@@ -1011,9 +1047,71 @@ return function(env)
       if not wired[f.ov] then
         wire(f.ov, f.st, f.pair, f.anim, f.bb, f.v3d)
       end
+      if f.st and f.pair then
+        adapter.__liveWire = { st = f.st, v3d = f.v3d }
+      end
     end
     if #found > 0 then installed = true end
     return installed
+  end
+
+  -- The screen-space bounds of a battler's STANDING MODEL, in the same
+  -- projected coordinate space the mode's own attachment API exposes,
+  -- for the aim frame on the model tier.  nil whenever that battler is
+  -- not standing as a model this frame (the caller falls back to the
+  -- card-tier cue, or none).
+  function adapter.aimRect(battle, battler)
+    local w = adapter.__liveWire
+    local St = w and w.st
+    local v3d = w and w.v3d
+    local s = St and St.__doubleBattlesPairState
+    if not (s and battle and battler and s.forBattle == battle) then
+      return nil
+    end
+    for _, side in ipairs({ "enemy", "player" }) do
+      local a = side == "enemy" and battle.enemy or battle.player
+      local b = side == "enemy" and battle.enemy2 or battle.player2
+      local lead, partner = anchorOrder(a, b)
+      if battler == lead and s.coversLead[side] then
+        -- the mode's own model: its projected body anchor, framed by
+        -- its footprint radius scaled the same way the anchor was
+        local okP, ax, ay = pcall(St.attachment, side, 0x64)
+        if okP and type(ax) == "number" and type(ay) == "number" then
+          local okF, r = pcall(St.footprint, side)
+          local half = 14
+          if okF and type(r) == "number" and v3d and s.arena
+             and s.arena[side] then
+            local cell = s.arena[side]
+            local okC, cx = pcall(v3d.project, cell[1], s.groundY, cell[2])
+            local okR2, rx = pcall(v3d.project, cell[1] + r, s.groundY,
+                                   cell[2])
+            if okC and okR2 and cx and rx then
+              half = math.max(8, math.abs(rx - cx))
+            end
+          end
+          return ax - half, ay - half, half * 2, half * 2
+        end
+      elseif battler == partner and s.coversLead[side] then
+        local mon = s.mons[side]
+        local pos = s.pos and s.pos[side]
+        if mon and mon.rig and mon.visible and pos and v3d
+           and type(v3d.project) == "function" then
+          local okH, h = pcall(mon.worldHeight, mon)
+          local okR, r = pcall(mon.worldRadius, mon)
+          h = (okH and type(h) == "number") and h or 16
+          r = (okR and type(r) == "number" and r > 0) and r or 8
+          local fx, fy = v3d.project(pos[1], s.groundY, pos[2])
+          local tx2, ty2 = v3d.project(pos[1], s.groundY + h, pos[2])
+          local rx = v3d.project(pos[1] + r, s.groundY, pos[2])
+          if fx and ty2 then
+            local half = math.max(8, rx and math.abs(rx - fx) or 10)
+            local top = math.min(ty2, fy)
+            return fx - half, top, half * 2, math.max(12, fy - top)
+          end
+        end
+      end
+    end
+    return nil
   end
 
   function adapter.installed()

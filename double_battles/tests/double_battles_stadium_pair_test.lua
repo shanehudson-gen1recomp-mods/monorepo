@@ -181,10 +181,10 @@ T.eq(s.coversLead.enemy, true, "the answer is recorded for the draws")
 fakeSt.covers(b, "player")
 
 -- geometry: axis enemy(0,100)->player(0,0) puts the lateral step on +x;
--- spacing is lead footprint 12 + own radius 10 + 6
+-- spacing is lead footprint 12 + own radius 10 + 10 (floor 24)
 fakeSt.update(0.016, b, 0)
 T.check(em.at ~= nil, "partner placed")
-T.eq(em.at[1], 28, "partner one spacing off the axis")
+T.eq(em.at[1], 32, "partner one spacing off the axis")
 T.eq(em.at[3], 100, "partner on its lead's row")
 T.check(em.built and em.built > 0, "partner posed and skinned")
 
@@ -196,7 +196,7 @@ fakeSt.cast("shadowmap")
 T.eq(em.shadow, 1, "partner casts its shadow")
 
 -- the B-mode disc widens to the pair, live
-T.eq(fakeSt.footprint("enemy"), 38, "disc widened: spacing + radius")
+T.eq(fakeSt.footprint("enemy"), 42, "disc widened: spacing + radius")
 
 -- ------- the battle taps drive the partner's model
 
