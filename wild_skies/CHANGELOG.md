@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.10.2
+
+- Fixes voxel overworlds (the Dramatic Shape family: DS, Dramaless,
+  Battle Art, Potato) dropping to 2D on Gen 1, typically at a map
+  transition and then staying 2D. The resident-sky ghost rows this mod
+  injects for neighbour maps were born without cell coordinates; the
+  voxel capture reads them for the ground lookup on that very frame,
+  threw on nil, and newer voxel builds latch to 2D after one failed
+  frame. Ghosts now carry their cell coordinates from birth, same as
+  the engine's own ghost rows. Thanks to ProwainK for pinpointing the
+  injection site.
+
 ## 1.10.1
 
 - Compatible with the engine's new mod sandbox (the grandmas-kitchen
