@@ -23,6 +23,13 @@
   and the arena is fetched live off `OverworldBattle.arena()`, so the
   models cover from the first battle on instead of the composed cards
   sitting in front of them.
+- Battle Art's animated species art now reaches the partner slots:
+  the fork animates by reassigning the two vanilla slots' sprites each
+  frame, so partners froze on their ROM pics while the leads animated.
+  The adapter hands the partner slots to the fork's own public update
+  through a proxy battle, so both mons on a side animate from the same
+  atlases. Probed by surface (AnimatedBattleArt), inert on OG Dramatic
+  Shape and Dramaless, which ship no animated art.
 
 ## 0.6.0
 

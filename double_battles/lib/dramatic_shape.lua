@@ -79,6 +79,41 @@ return function(env)
              w = img:getWidth() * s, h = img:getHeight() * s }
   end
 
+  -- Battle Art's animated species art advances by reassigning
+  -- battler.sprite every frame -- but only for the two vanilla slots,
+  -- so the partner froze on its ROM pic while the lead animated.  Its
+  -- per-battler state machine is slot-agnostic, so the partner slots
+  -- ride the fork's own public update through a proxy battle whose
+  -- lead fields ARE the partners.  false (never nil) where a partner
+  -- is absent: nil would fall through the proxy's __index to the real
+  -- lead and tick it twice a frame.  The trainer-art arms are held
+  -- inert (playerBackPic/show* false); the fork already runs those on
+  -- the real battle.
+  local animProxies = setmetatable({}, { __mode = "k" })
+  local animClocks = setmetatable({}, { __mode = "k" })
+  local function tickPartnerArt(Anim, battle)
+    if not (Anim and type(Anim.update) == "function"
+            and battle and battle.__double) then
+      return
+    end
+    local now = (love.timer and love.timer.getTime)
+      and love.timer.getTime() or 0
+    local dt = math.min(0.1, math.max(0,
+      now - (animClocks[battle] or now)))
+    animClocks[battle] = now
+    local proxy = animProxies[battle]
+    if not proxy then
+      proxy = setmetatable({ playerBackPic = false,
+                             showEnemyTrainer = false,
+                             showPlayerBack = false },
+                           { __index = battle })
+      animProxies[battle] = proxy
+    end
+    proxy.enemy = rawget(battle, "enemy2") or false
+    proxy.player = rawget(battle, "player2") or false
+    pcall(Anim.update, proxy, dt)
+  end
+
   -- the blinking aim frame, around whichever battler the prompt aims at
   local function drawCue(battle, side, drawn)
     local aimed, color
@@ -99,10 +134,11 @@ return function(env)
 
   -- ------- the three hooks, made per wired module set
 
-  local function makeSideTextureHook(Ov, St)
+  local function makeSideTextureHook(Ov, St, Anim)
     return function(battle, side)
       local orig = Ov.__doubleBattlesOrigSideTexture
       if not (battle and battle.__double) then return orig(battle, side) end
+      tickPartnerArt(Anim, battle)
       -- the intro trainer frames belong to the original whole: it hangs
       -- them from the trainer pic's own slot (trainer = true results)
       if side == "enemy" and battle.showEnemyTrainer then
@@ -767,7 +803,16 @@ return function(env)
               pair = { Mon = m, Pack = p }
             end
           end
-          found[#found + 1] = { ov = ov, st = st, pair = pair }
+          -- Battle Art's animated species art, absent on OG DS and
+          -- Dramaless; probed by surface like everything else here
+          local anim
+          local okA, a = pcall(V.require, "AnimatedBattleArt")
+          if okA and type(a) == "table"
+             and type(a.update) == "function" then
+            anim = a
+          end
+          found[#found + 1] = { ov = ov, st = st, pair = pair,
+                                anim = anim }
         end
       end
     end
@@ -819,7 +864,7 @@ return function(env)
     end
   end
 
-  local function wire(ov, st, pair)
+  local function wire(ov, st, pair, anim)
     if not ov.__doubleBattlesOrigSideTexture then
       ov.__doubleBattlesOrigSideTexture = ov.sideTexture
       ov.sideTexture = function(battle, side)
@@ -836,7 +881,7 @@ return function(env)
         return ov.__doubleBattlesOrigHudTexture(battle, slide, ...)
       end
     end
-    ov.__doubleBattlesSideTextureHook = makeSideTextureHook(ov, st)
+    ov.__doubleBattlesSideTextureHook = makeSideTextureHook(ov, st, anim)
     ov.__doubleBattlesHudTextureHook = makeHudTextureHook(ov)
     if st then
       if not st.__doubleBattlesOrigCovers then
@@ -871,7 +916,7 @@ return function(env)
   function adapter.tryInstall()
     local found = locateAll()
     for _, f in ipairs(found) do
-      if not wired[f.ov] then wire(f.ov, f.st, f.pair) end
+      if not wired[f.ov] then wire(f.ov, f.st, f.pair, f.anim) end
     end
     if #found > 0 then installed = true end
     return installed
