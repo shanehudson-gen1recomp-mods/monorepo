@@ -35,6 +35,15 @@ return function(mod)
       choices = { { "PAIR", "pair" }, { "SOLO", "solo" } } },
     { key = "trainer_doubles", label = "TRAINER 2V2", type = "toggle",
       default = true },
+    -- two unfought trainers standing side by side fight you together,
+    -- the gen 3 pair convention.  Story battles (anything with a
+    -- victory reward: leaders, rivals, scripted fights) never pair.
+    { key = "trainer_pairs", label = "TRAINER PAIRS", type = "toggle",
+      default = true },
+    -- how far apart the two can stand and still count as a pair
+    { key = "pair_distance", label = "PAIR DISTANCE", type = "choice",
+      default = 1,
+      choices = { { "TOUCHING", 1 }, { "2 CELLS", 2 }, { "3 CELLS", 3 } } },
     { key = "double_exp", label = "DOUBLES EXP", type = "choice",
       default = "full",
       choices = { { "FULL", "full" }, { "HALF", "half" } } },
@@ -152,6 +161,16 @@ return function(mod)
     end
     return false
   end
+  -- what a pair battle is, for end-of-battle consumers: both classes,
+  -- and whether trainer B has taken the lead slot over.  battle.oppClass
+  -- keeps trainer A's class for the whole battle either way.
+  mod.exports.pairInfo = function(battle)
+    local info = battle and battle.__dbPairInfo
+    if not info then return nil end
+    return { classA = info.classA, classB = info.classB,
+             partyIndexB = info.partyIndexB, takenOver = info.takenOver }
+  end
+
   mod.exports.registerTrainerPairSource = function(source)
     if type(source) ~= "table" or type(source.provide) ~= "function"
        or source.id == nil then
@@ -472,6 +491,14 @@ return function(mod)
   -- party backs the lead slot, B's the second; when A runs dry the
   -- battle hands its endgame (defeat text, payout) to B.  Payout is
   -- therefore B's alone, a known simplification.
+  -- truthy while decoratePair builds side B through the engine's own
+  -- trainer path.  That build fires the full trainer.party hook chain,
+  -- and a trainer mod tracking "the battle about to start" (ai_rivals'
+  -- pending rival) cannot otherwise tell a filler build from a real
+  -- engagement.  Published so their wraps can stand down for it.
+  local buildingSideB = false
+  mod.exports.buildingPairSide = function() return buildingSideB end
+
   local function decoratePair(game, battle, oppClassB, partyIndexB)
     if not battle or battle.__double or battle.kind ~= "trainer"
        or battle.dead then
@@ -479,8 +506,11 @@ return function(mod)
     end
     local BattleState = require("src.battle.BattleState")
     if type(BattleState.makeBattler) ~= "function" then return battle end
+    local classA = battle.oppClass
+    buildingSideB = true
     local okT, tmp = pcall(BattleState.newTrainer, game, oppClassB,
                            tonumber(partyIndexB) or 1)
+    buildingSideB = false
     if not (okT and tmp) or tmp.dead or not tmp.enemy then return battle end
     local partyB = tmp.enemyParty or {}
     if #partyB == 0 then return battle end
@@ -489,6 +519,9 @@ return function(mod)
     battle.__dbSideB = { trainer = tmp.trainer, party = partyB,
                          index = tmp.enemyIndex or 1,
                          aiMods = tmp.enemyAIMods }
+    battle.__dbPairInfo = { classA = classA, classB = oppClassB,
+                            partyIndexB = tonumber(partyIndexB) or 1,
+                            takenOver = false }
 
     -- slot 2 refills from B's bench only
     battle.__dbRefill = function(self)
@@ -551,6 +584,12 @@ return function(mod)
       local baseMoney = (self.trainer and self.trainer.baseMoney) or 0
       self.__dbExtraPayout = (self.__dbExtraPayout or 0)
         + baseMoney * ((lastMon and lastMon.level) or 0)
+      -- the battle STARTED as trainer A's, and end-of-battle consumers
+      -- (ai_rivals keys its win/loss records on the opening class) are
+      -- entitled to that identity: oppClass stays A's, and the original
+      -- trainer record survives on a public field
+      self.dbOriginalTrainer = self.dbOriginalTrainer or self.trainer
+      if self.__dbPairInfo then self.__dbPairInfo.takenOver = true end
       self.trainer = b.trainer or self.trainer
       self.enemyParty = b.party
       self.enemyIndex = b.index or 1
@@ -601,6 +640,11 @@ return function(mod)
       end
       return true
     end
+    pcall(function()
+      mod.events:emit("mod.double_battles.pair_decorated", {
+        battle = battle, classA = classA, classB = oppClassB,
+      })
+    end)
     return battle
   end
 
@@ -1902,6 +1946,89 @@ return function(mod)
   -- a map change orphans the deferred battle: it never starts
   mod.events:on("map.exited", function() pendingBox().current = nil end)
 
+  -- story battles never pair: anything whose victory pays out through
+  -- the scripted rewards table (badges, gym prizes, staged scenes) is
+  -- authored art, not a route skirmish.  Derived from the dataset, so
+  -- overhauls that add their own staged fights are covered for free.
+  local function scriptedVictory(class, partyIndex)
+    local ok, victories = pcall(require, "data.scripts.victories")
+    if not (ok and type(victories) == "table") then return false end
+    return victories[tostring(class) .. "#" .. tostring(partyIndex or 1)]
+      ~= nil
+  end
+
+  -- a trainer class another mod AUTHORED (AI Rivals' walking rivals,
+  -- say) belongs to that mod's own story: its duels stay 1v1 and its
+  -- characters are never conscripted as pair partners, unless the
+  -- owning mod opts in through a pair source -- which always outranks
+  -- this local pairing anyway.  Authored means a mod REGISTERED the
+  -- class: a base class can never receive a register op (the registry
+  -- collides it), so patches to vanilla classes (balance mods) do not
+  -- count.  Reads the registry's op log through engine_internals; any
+  -- shape change degrades to "not authored", never to a crash.
+  local function modAuthoredClass(game, class)
+    local ok, authored = pcall(function()
+      local reg = game.mods and game.mods.content
+        and game.mods.content.trainers
+      for _, entry in ipairs((reg and reg.ops and reg.ops[class]) or {}) do
+        if entry.op == "register" and entry.owner ~= nil then return true end
+      end
+      return false
+    end)
+    return ok and authored or false
+  end
+
+  -- the gen 3 pair convention, derived from the live map: the engaged
+  -- trainer's own npc (the battle names it through checkpointOrigin),
+  -- then any unfought plain trainer standing within one cell of it
+  local function adjacentTrainer(game, ow, battle)
+    local origin = battle and battle.checkpointOrigin
+    local npcId = origin and origin.npcId
+    if not (npcId and ow and type(ow.npcs) == "table") then return nil end
+    if scriptedVictory(origin.trainerClass, origin.partyIndex)
+       or modAuthoredClass(game, origin.trainerClass) then
+      return nil
+    end
+    local engaged
+    for _, npc in ipairs(ow.npcs) do
+      if npc.id == npcId then engaged = npc break end
+    end
+    if not (engaged and engaged.def) then return nil end
+    local beaten = (game.save and game.save.defeatedTrainers) or {}
+    local reach = tonumber(mod.options:get("pair_distance")) or 1
+    for _, npc in ipairs(ow.npcs) do
+      local d = npc ~= engaged and npc.def or nil
+      if d and d.trainerClass and not beaten[npc.id]
+         and math.abs((npc.cellX or 99) - (engaged.cellX or 0)) <= reach
+         and math.abs((npc.cellY or 99) - (engaged.cellY or 0)) <= reach
+         and not scriptedVictory(d.trainerClass, d.trainerParty)
+         and not modAuthoredClass(game, d.trainerClass) then
+        return d.trainerClass, d.trainerParty, npc
+      end
+    end
+  end
+
+  -- a pair win beats BOTH trainers: the partner's defeat flag and
+  -- header event land exactly as if they had been fought alone, so
+  -- sight cones, scripts and rematch logic all agree they lost
+  local function markPairPartner(game, ow, battle, npc)
+    battle.__dbPairNpcId = npc.id
+    local origFinish = battle.onFinish
+    battle.onFinish = function(result, ...)
+      if result == "win" then
+        pcall(function()
+          game.save.defeatedTrainers[npc.id] = true
+          local header = game.data:trainerHeader(ow.map.def.label,
+            npc.def.index)
+          if header and header.event then
+            game.save.flags[header.event] = true
+          end
+        end)
+      end
+      if origFinish then return origFinish(result, ...) end
+    end
+  end
+
   do
     local OC = require("src.world.OverworldController")
     if not OC.__doubleBattlesWrapped then
@@ -1919,11 +2046,21 @@ return function(mod)
       if battle and battle.kind == "trainer" and not battle.__double
          and not battle.dead then
         -- a registered pair source gets first refusal: a second
-        -- trainer joining beats the same trainer sending two.  A
-        -- refused class falls back to the ordinary trainer double.
+        -- trainer joining beats the same trainer sending two.  With no
+        -- source, an unfought trainer standing beside the engaged one
+        -- joins in (TRAINER PAIRS, veto-respecting).  A refused class
+        -- falls back to the ordinary trainer double.
         local oppB, idxB = providerPair(Game, battle)
+        local partnerNpc
+        if not oppB and mod.options:get("trainer_pairs")
+           and not vetoedBy(Game, battle) then
+          oppB, idxB, partnerNpc = adjacentTrainer(Game, owSelf, battle)
+        end
         if oppB then
           decoratePair(Game, battle, oppB, idxB)
+          if battle.__double and partnerNpc then
+            markPairPartner(Game, owSelf, battle, partnerNpc)
+          end
         end
         if not battle.__double then
           decorateTrainer(Game, battle)

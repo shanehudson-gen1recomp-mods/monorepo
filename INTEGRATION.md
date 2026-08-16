@@ -294,6 +294,36 @@ once" moment decides its own conditions. Staged pairs by command or
 export (`startTrainerPair`) are unchanged.
 `unregisterTrainerPairSource(id)` removes one.
 
+With no source registered, pairs still happen on their own: when an
+unfought plain trainer stands within PAIR DISTANCE of the engaged one
+(touching, 2 or 3 cells; touching by default), the two fight you
+together (the gen 3 pair convention), gated by the TRAINER PAIRS
+option and by vetoes. Trainer classes registered by another mod (AI
+Rivals' walkers, say) are exempt on both sides: their duels stay 1v1
+and their characters never get conscripted as partners -- a pair
+source registered by the owning mod is the opt-in, and it always
+outranks the local pairing. Story battles never pair -- any
+class#party with a scripted victory reward (badges, prizes, staged
+scenes) is excluded on both sides, derived from the dataset. A pair
+win beats both trainers: the partner's defeat flag and header event
+land exactly as if fought alone.
+
+Contract details a trainer mod should know:
+
+- Building side B runs the engine's own trainer path, so the
+  `trainer.party` hook chain fires a second time for a battle that is
+  not "starting". `exports.buildingPairSide()` is truthy for exactly
+  that build -- a mod tracking "the battle about to start" (a pending
+  rival, say) should stand down while it is.
+- `battle.oppClass` keeps trainer A's class for the whole battle, even
+  after trainer B takes over the lead slot; the original trainer
+  record survives on `battle.dbOriginalTrainer`.
+- `exports.pairInfo(battle)` returns `{ classA, classB, partyIndexB,
+  takenOver }` for a pair, nil otherwise -- the supported way to tell
+  a pair from a TRAINER 2V2.
+- `mod.double_battles.pair_decorated` fires when a pair forms:
+  `{ battle, classA, classB }`.
+
 ### Ally sources and vetoes
 
 `registerAllySource({ id, priority, provide })` picks WHICH of your
@@ -303,11 +333,12 @@ healthy non-lead party member falls through to the default (the next
 healthy bench mon). free_fly registers the mount here at priority 50,
 so mid-air your ride is the one fighting beside you.
 
-`registerDoubleVeto({ id, veto })` keeps specific wild encounters
-strictly 1v1: `veto(game, battle)` returning true blocks the
-decoration before any partner is rolled. Vetoes never affect trainer
-battles or the explicit `start*` exports. wild_skies vetoes its
-legendary sightings this way. `unregisterAllySource(id)` and
+`registerDoubleVeto({ id, veto })` keeps specific battles out of the
+automatic decorations: `veto(game, battle)` returning true blocks a
+wild double before any partner is rolled, and keeps a trainer battle
+from gaining an adjacent partner. Vetoes never affect explicit
+requests -- the `start*` exports and registered pair sources fire
+regardless. wild_skies vetoes its legendary sightings this way. `unregisterAllySource(id)` and
 `unregisterDoubleVeto(id)` remove one each.
 
 ### Events
