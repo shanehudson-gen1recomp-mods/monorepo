@@ -902,7 +902,8 @@ return function(env)
     local exports = Game.mods and Game.mods.exports
     if type(exports) ~= "table" then return {} end
     local found = {}
-    for _, entry in pairs(exports) do
+    local owners = {}
+    for id, entry in pairs(exports) do
       local V = type(entry) == "table" and entry.lib
       if type(V) == "table" and type(V.require) == "function" then
         local okO, ov = pcall(V.require, "OverworldBattle")
@@ -950,8 +951,21 @@ return function(env)
           end
           found[#found + 1] = { ov = ov, st = st, pair = pair,
                                 anim = anim, bb = bb, v3d = v3d }
+          owners[#owners + 1] = tostring(id)
         end
       end
+    end
+    -- two live battle-scene forks double-draw every battle (cards over
+    -- models, two updates fighting for the same slots).  The loader
+    -- cannot know these ids conflict, so say it HERE, loudly: this one
+    -- line explains a whole class of "2D sprites over my 3D" reports.
+    if #found > 1 and not adapter.__multiWarned then
+      adapter.__multiWarned = true
+      pcall(function()
+        env.log:warn("%d battle-scene mods are enabled at once (%s); "
+          .. "battles will double-draw -- enable exactly one",
+          #found, table.concat(owners, ", "))
+      end)
     end
     return found
   end
