@@ -216,16 +216,20 @@ local fakeOv3 = {
   hudTexture = function() return "hud-layer" end,
   textures = function() return {} end,
 }
-local depthDuringDraw
-local fakeBb = { PULL = 1.5, draw = function()
+local depthDuringDraw, pullDuringDraw
+local fakeBb
+fakeBb = { PULL = 1.5, draw = function()
   local test = love.graphics.getDepthMode()
   depthDuringDraw = test
+  pullDuringDraw = fakeBb.PULL
   return true
 end }
+local fakeV3d = { eye = { 0, 40, 120 } }
 fakeGame.mods.exports.BATTLE_ART = { lib = { require = function(name)
   if name == "OverworldBattle" then return fakeOv3 end
   if name == "AnimatedBattleArt" then return fakeAnim end
   if name == "BattleBillboard" then return fakeBb end
+  if name == "Voxel3D" then return fakeV3d end
   error("unexpected module " .. tostring(name))
 end } }
 local g = love.graphics
@@ -267,20 +271,24 @@ T.eq(animSeen.proxy.data, b2.data,
 -- state around the draw are untouched, and singles keep the mode's
 -- honest occlusion.
 fakeOv3.sideTexture(b2, "enemy")
-depthDuringDraw = nil
-T.eq(fakeBb.draw(), true, "wrapped card draw still draws")
+depthDuringDraw, pullDuringDraw = nil, nil
+T.eq(fakeBb.draw(nil, 0, 0, 0), true, "wrapped card draw still draws")
 T.eq(depthDuringDraw, "always",
   "a live double paints the card over the scene")
+T.check(pullDuringDraw and pullDuringDraw > 90,
+  "and the card's depth pulls most of the way to the eye")
 T.eq(depthTest, "lequal", "the depth mode is restored after the draw")
 T.eq(depthWrite, true, "and depth writes were never touched")
+T.eq(fakeBb.PULL, 1.5, "the mode's own pull is restored after the draw")
 
 animSeen = nil
 fakeOv3.sideTexture({}, "enemy")
 T.check(animSeen == nil, "a non-double battle never ticks partner art")
-depthDuringDraw = nil
-fakeBb.draw()
+depthDuringDraw, pullDuringDraw = nil, nil
+fakeBb.draw(nil, 0, 0, 0)
 T.eq(depthDuringDraw, "lequal",
   "with no live double the card keeps honest occlusion")
+T.eq(pullDuringDraw, 1.5, "and the mode's own pull")
 
 g.getDepthMode, g.setDepthMode = savedGet, savedSet
 

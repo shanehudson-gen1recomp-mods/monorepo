@@ -23,13 +23,20 @@
   and the arena is fetched live off `OverworldBattle.arena()`, so the
   models cover from the first battle on instead of the composed cards
   sitting in front of them.
+- Catching one of two wild Pokémon no longer ends the battle. The
+  caught mon rides the whole vanilla pipeline (storage, dex page,
+  nickname), then the survivor steps into the vanilla slot and the
+  fight goes on; the ball spent the turn, so the survivor gets its
+  free move, exactly like a missed throw.
 - Doubled battles paint the battlers over the scene: the mode draws
   each side's card as geometry in the world, and a doubled side's
   wider card could end up inside arena scenery (a partner half-buried
   in a boulder). While a double is live the card draw runs with the
-  depth test forced to "always", so both mons on both sides stand in
-  front of the scene; screen position, shadows, and depth writes are
-  untouched, and single battles keep the mode's honest occlusion.
+  depth test forced to "always" AND its written depth pulled most of
+  the way to the camera (bounded by the real eye distance), so both
+  mons stand in front of the scene whichever order the world drew in;
+  screen position, shadows, and depth-write state are untouched, and
+  single battles keep the mode's honest occlusion.
 - Battle Art's animated species art now reaches the partner slots:
   the fork animates by reassigning the two vanilla slots' sprites each
   frame, so partners froze on their ROM pics while the leads animated.

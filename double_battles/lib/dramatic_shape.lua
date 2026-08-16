@@ -150,20 +150,42 @@ return function(env)
       return bb.__doubleBattlesOrigDraw(...)
     end
   end
-  local function makeCardDrawHook(bb)
-    return function(...)
+  -- Two halves, because draw order cuts both ways: the "always" depth
+  -- test paints the card over scenery drawn BEFORE it, and the raised
+  -- camera-ward pull writes the card's depth near the eye so scenery
+  -- drawn AFTER it loses the depth test too.  The pull moves each
+  -- vertex along its own eye ray (screen position unchanged); it is
+  -- bounded by the card's actual eye distance so no vertex can cross
+  -- the camera, which caps it at beating occluders standing farther
+  -- than about a quarter of the way out from the lens.
+  local function makeCardDrawHook(bb, v3d)
+    return function(tex, x, y, z, ...)
       if not doubleIsLive() then
-        return bb.__doubleBattlesOrigDraw(...)
+        return bb.__doubleBattlesOrigDraw(tex, x, y, z, ...)
       end
       local g = love and love.graphics
       if not (g and g.getDepthMode and g.setDepthMode) then
-        return bb.__doubleBattlesOrigDraw(...)
+        return bb.__doubleBattlesOrigDraw(tex, x, y, z, ...)
       end
       local okG, prevTest, prevWrite = pcall(g.getDepthMode)
-      if not okG then return bb.__doubleBattlesOrigDraw(...) end
+      if not okG then
+        return bb.__doubleBattlesOrigDraw(tex, x, y, z, ...)
+      end
+      local savedPull = bb.PULL
+      local eye = v3d and v3d.eye
+      if type(eye) == "table" and type(x) == "number" then
+        local dx = (eye[1] or 0) - x
+        local dy = (eye[2] or 0) - (y or 0)
+        local dz = (eye[3] or 0) - (z or 0)
+        local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+        local pulled = math.min(dist * 0.75, dist - 24)
+        if pulled > (tonumber(savedPull) or 0) then bb.PULL = pulled end
+      end
       pcall(g.setDepthMode, "always", prevWrite)
-      local ok, result = pcall(bb.__doubleBattlesOrigDraw, ...)
+      local ok, result = pcall(bb.__doubleBattlesOrigDraw,
+                               tex, x, y, z, ...)
       pcall(g.setDepthMode, prevTest, prevWrite)
+      bb.PULL = savedPull
       if not ok then error(result, 0) end
       return result
     end
@@ -867,15 +889,18 @@ return function(env)
              and type(a.update) == "function" then
             anim = a
           end
-          -- the card draw, for the doubled-side depth override
-          local bb
+          -- the card draw, for the doubled-side depth override; Voxel3D
+          -- for the eye the pull is bounded against
+          local bb, v3d
           local okB, bbMod = pcall(V.require, "BattleBillboard")
           if okB and type(bbMod) == "table"
              and type(bbMod.draw) == "function" then
             bb = bbMod
+            local okV, v = pcall(V.require, "Voxel3D")
+            if okV and type(v) == "table" then v3d = v end
           end
           found[#found + 1] = { ov = ov, st = st, pair = pair,
-                                anim = anim, bb = bb }
+                                anim = anim, bb = bb, v3d = v3d }
         end
       end
     end
@@ -927,7 +952,7 @@ return function(env)
     end
   end
 
-  local function wire(ov, st, pair, anim, bb)
+  local function wire(ov, st, pair, anim, bb, v3d)
     if not ov.__doubleBattlesOrigSideTexture then
       ov.__doubleBattlesOrigSideTexture = ov.sideTexture
       ov.sideTexture = function(battle, side)
@@ -948,7 +973,7 @@ return function(env)
     ov.__doubleBattlesHudTextureHook = makeHudTextureHook(ov)
     if bb then
       wrapCardDraw(bb)
-      bb.__doubleBattlesDrawHook = makeCardDrawHook(bb)
+      bb.__doubleBattlesDrawHook = makeCardDrawHook(bb, v3d)
     end
     if st then
       if not st.__doubleBattlesOrigCovers then
@@ -983,7 +1008,9 @@ return function(env)
   function adapter.tryInstall()
     local found = locateAll()
     for _, f in ipairs(found) do
-      if not wired[f.ov] then wire(f.ov, f.st, f.pair, f.anim, f.bb) end
+      if not wired[f.ov] then
+        wire(f.ov, f.st, f.pair, f.anim, f.bb, f.v3d)
+      end
     end
     if #found > 0 then installed = true end
     return installed

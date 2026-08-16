@@ -1531,6 +1531,47 @@ return function(mod)
       self.phase = "menu"
     end
 
+    -- catching one of two wild foes used to end the battle (the other
+    -- fled).  Now the survivor stays: the caught mon rides the whole
+    -- vanilla pipeline out of the lead slot (the aim commit put it
+    -- there -- storage, dex, nickname all untouched), then the partner
+    -- promotes the way a lead faint promotes and the fight goes on.
+    -- The ball spent the turn, so the survivor takes its free move,
+    -- exactly like a missed throw.
+    local origStore = battle.storeCaughtMon
+    if type(origStore) == "function" then
+      battle.storeCaughtMon = function(self)
+        origStore(self)
+        if not (self.kind == "wild" and alive(self.enemy2)) then return end
+        self.result = nil
+        self.afterQueue = "menu"
+        self:act(function()
+          -- the capture chain hid the lead pic and parked the closed
+          -- ball on screen; both belong to the mon that just left
+          self.enemyHidden = false
+          self.lockedBall = nil
+          local Runtime = require("src.mods.Runtime")
+          local previous = self.enemy
+          self.enemy = self.enemy2
+          self.enemy2 = nil
+          self.enemy.dbAnchor = 1
+          self:syncSides()
+          self:markParticipant()
+          Runtime.emit("battle.battler_switched", {
+            battle = self, side = self.sides[2], battler = self.enemy,
+            previous = previous,
+          })
+          self:sayNext(Strings("Wild %s is\nstill in the fight!",
+                               self.enemy.name))
+        end)
+        self:act(function()
+          self:executeAction(self.enemy, self.player, self:enemyAction())
+        end)
+        self:queueResidual(self.player, self.enemy)
+        self:act(function() self:endOfTurn() end)
+      end
+    end
+
     -- the db_target phase: LEFT/RIGHT swap foes, A locks in, B backs
     -- out to the move menu; everything else stays vanilla
     local origUpdate = battle.update
