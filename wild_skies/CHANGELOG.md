@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.0
+
+- The shared sky resolver grew a directional rung: a sprite source can
+  answer with a PMD-style sheet (8 facing rows, per-frame durations)
+  and flyers wear it with true diagonal facings. PMD Sky Sprites is
+  the first such source. Sources answering the classic shapes are
+  untouched.
+
+
 ## 1.10.2
 
 - Fixes voxel overworlds (the Dramatic Shape family: DS, Dramaless,

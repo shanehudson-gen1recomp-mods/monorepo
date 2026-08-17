@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.7.0
+
+- Diagonal flight: on a mount whose sheet carries all eight facing
+  rows (a PMD Sky Sprites source), holding two directions flies the
+  diagonal -- the engine's four-way steps zigzag cell by cell, which
+  at flight speed reads straight, and the mount faces the true
+  diagonal row the whole way. Four-way mounts keep classic flight,
+  and nothing changes on the ground.
+
+
 ## 1.6.2
 
 - Compatible with the engine's new mod sandbox (the grandmas-kitchen

@@ -230,6 +230,77 @@ end
 
 local sourceCache = {}
 
+-- PMD-style directional sheets: 8 rows of frames, one row per facing,
+-- rotating clockwise from facing the camera (the SpriteCollab layout).
+-- A source def opts in with directions = 8; diagonal facings land on
+-- their own rows and the four cardinals work as they always did, so a
+-- caller that only ever says "left" loses nothing.
+Sky.PMD_ROWS = { down = 0, downright = 1, right = 2, upright = 3,
+                 up = 4, upleft = 5, left = 6, downleft = 7 }
+
+-- frame from the def's own PMD durations (1/60s units), walked on the
+-- shared clock so every flyer of a species flaps in its own rhythm.
+-- A def.frameSubset names specific columns (1-based) and cycles only
+-- those: the curated flap pulled out of an otherwise unusable sheet
+-- (FlapAround is a tumble; its first two columns are a clean flap).
+local function pmdFrame(def, t)
+  local subset = def.frameSubset
+  if type(subset) == "table" and #subset > 0 then
+    local per = def.subsetTicks or 9
+    local i = math.floor(t * 60 / per) % #subset + 1
+    return (subset[i] or 1) - 1
+  end
+  local durations = def.durations
+  local n = def.frames or 1
+  if type(durations) ~= "table" or #durations == 0 then
+    return math.floor(t * 8) % n
+  end
+  local total = 0
+  for i = 1, #durations do total = total + (durations[i] or 4) end
+  local tick = (t * 60) % math.max(1, total)
+  for i = 1, #durations do
+    tick = tick - (durations[i] or 4)
+    if tick < 0 then return (i - 1) % n end
+  end
+  return 0
+end
+
+-- the draw for a directional sheet: row by facing, frame by the def's
+-- durations, mirroring nothing (all eight rows are authored)
+local function directionalDraw(renderer, def)
+  local quads = {}
+  local rows = def.rows or Sky.PMD_ROWS
+  return function(self, px, py, camX, camY, facing, walkPhase)
+    local image = self.resolveImage and self:resolveImage() or self.image
+    if not image then return end
+    local row = rows[facing] or rows.down or 0
+    local frame = pmdFrame(def, (love.timer and love.timer.getTime
+      and love.timer.getTime() or 0) + (self.pmdPhase or 0))
+    local key = row * 64 + frame
+    local quad = quads[key]
+    if not quad then
+      local okQ, q = pcall(love.graphics.newQuad,
+        frame * def.frameWidth, row * def.frameHeight,
+        def.frameWidth, def.frameHeight,
+        image:getWidth(), image:getHeight())
+      if not okQ then return end
+      quad = q
+      quads[key] = quad
+    end
+    -- feet on the standard anchor (px + 8, py + 12).  PMD art is drawn
+    -- 24px to the tile against the GB's 16, and each species' size is
+    -- authored INTO its sheet, so one constant 2/3 scale carries the
+    -- whole roster over honestly -- big stays big, small stays small
+    local k = 2 / 3
+    local fx = px + 8 - camX
+    local fy = py + 12 - camY
+    love.graphics.draw(image, quad,
+      math.floor(fx - def.frameWidth * k / 2),
+      math.floor(fy - def.frameHeight * k),
+      0, k, k)
+  end
+end
+
 local function borrowedSprite(data, species, dex, seedPrefix)
   local okG, Game = pcall(require, "src.core.Game")
   Game = okG and Game or nil
@@ -256,6 +327,9 @@ local function borrowedSprite(data, species, dex, seedPrefix)
           end
           if okR and renderer then
             renderer.skySource = tostring(source.mod or source.id)
+            if (def.directions or 0) == 8 then
+              renderer.draw = directionalDraw(renderer, def)
+            end
           end
           sourceCache[key] = okR and renderer or false
         end
@@ -623,7 +697,11 @@ end
 -- the dex scale: their geometry is a crop box, not a size statement.
 function Sky.trueSized(renderer)
   local def = renderer and renderer.def
-  if not def or def.walker ~= true then return false end
+  if not def then return false end
+  -- a directional (PMD) sheet authors each species' size into its
+  -- frames; scaling it again by dex height would double it
+  if (def.directions or 0) == 8 then return true end
+  if def.walker ~= true then return false end
   return (def.frameWidth or 16) ~= 16 or (def.frameHeight or 16) ~= 16
 end
 

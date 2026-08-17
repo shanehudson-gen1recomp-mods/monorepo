@@ -1,0 +1,22 @@
+{
+  "id": "pmd_sky_sprites",
+  "name": "PMD Sky Sprites",
+  "version": "0.1.0",
+  "entry": "main.lua",
+  "api": 2,
+  "games": ["gen1", "gen2"],
+  "category": "ART",
+  "priority": 200,
+  "dependencies": [],
+  "optional_dependencies": [
+    "wild_skies",
+    "free_fly"
+  ],
+  "conflicts": [],
+  "permissions": [
+    "engine_internals"
+  ],
+  "game_version": "0.0.0-dev || >=0.1.0 <2.0.0",
+  "description": "PMDCollab SpriteCollab's community animation sheets dress the sky: wild flyers and your FLY mount wear species-true, 8-direction PMD art in the air (CC BY-NC 4.0, credits included).",
+  "github": "shanehudson-gen1recomp-mods/pmd_sky_sprites"
+}

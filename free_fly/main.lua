@@ -1673,6 +1673,68 @@ return function(mod)
       end
     end
 
+    -- ------- diagonal flight (directional mounts)
+    -- The engine's step movement is four-way.  A mount whose sheet
+    -- carries all eight facing rows (a PMD sprite source) unlocks
+    -- diagonals: with two directions held, the input the engine sees
+    -- alternates axes each cell, so the path zigzags cell by cell --
+    -- which at flight speed reads as a straight diagonal -- while the
+    -- pose faces the true diagonal row the whole way.
+    local function mountDirectional()
+      local m = Player.__freeFlyMount
+      local def = m and m.def
+      return def ~= nil and (def.directions or 0) == 8
+    end
+    if Game.input and not Game.input.__freeFlyDiagWrapped then
+      Game.input.__freeFlyDiagWrapped = true
+      Game.input.__freeFlyRawIsDown = Game.input.isDown
+      Game.input.isDown = function(self, key)
+        local drop = Game.input.__freeFlyDiagDrop
+        if drop and drop[key] then return false end
+        return Game.input.__freeFlyRawIsDown(self, key)
+      end
+    end
+    local DROP_HORIZONTAL = { left = true, right = true }
+    local DROP_VERTICAL = { up = true, down = true }
+    local function updateDiagonal(p)
+      if not (Game.input and Game.input.__freeFlyRawIsDown) then return end
+      if not (p and p.freeFlying and mountDirectional()) then
+        state.diag, state.diagCell = nil, nil
+        state.smoothX, state.smoothY = nil, nil
+        Game.input.__freeFlyDiagDrop = nil
+        return
+      end
+      local raw = Game.input.__freeFlyRawIsDown
+      local u = raw(Game.input, "up")
+      local d = raw(Game.input, "down")
+      local l = raw(Game.input, "left")
+      local r = raw(Game.input, "right")
+      local diag = (u and l and "upleft") or (u and r and "upright")
+        or (d and l and "downleft") or (d and r and "downright")
+      state.diag = diag
+      if not diag then
+        state.diagCell = nil
+        state.smoothX, state.smoothY = nil, nil
+        Game.input.__freeFlyDiagDrop = nil
+        return
+      end
+      local cell = tostring(p.cellX) .. ":" .. tostring(p.cellY)
+      if state.diagCell ~= cell then
+        state.diagCell = cell
+        state.diagVert = not state.diagVert
+      end
+      Game.input.__freeFlyDiagDrop = state.diagVert and DROP_HORIZONTAL
+        or DROP_VERTICAL
+      -- the drawn mount and the camera glide the diagonal while the
+      -- cells staircase beneath: a low-pass over the true position
+      -- (see the pose and the camera follow)
+      if not state.smoothX then
+        state.smoothX, state.smoothY = p.px, p.py
+      end
+      state.smoothX = state.smoothX + (p.px - state.smoothX) * 0.22
+      state.smoothY = state.smoothY + (p.py - state.smoothY) * 0.22
+    end
+
     OC.__freeFlyTick = function(ow, dt)
       -- the shared wrap is mid-frame through an older leftover wrap:
       -- the outermost runs this tick once when the frame unwinds
@@ -1685,6 +1747,7 @@ return function(mod)
       if ensurePF then ensurePF() end
       local p = ow.player
       if not p then return end
+      updateDiagonal(p)
       if not Sky.goldWorld(ow) then
         pcall(dressWrappedFollower, Game, ow)
       end
@@ -2118,7 +2181,11 @@ return function(mod)
         camLift = state.alt
       end
       if not Sky.goldWorld(ow) then
-        ow.camera:follow(p.px, p.py - camLift,
+        local cfx, cfy = p.px, p.py
+        if state.diag and state.smoothX then
+          cfx, cfy = state.smoothX, state.smoothY
+        end
+        ow.camera:follow(cfx, cfy - camLift,
                          Game.renderer:worldViewSize())
       end
       -- Stadium 2's Gold voxel worlds read this render-only lift for
@@ -2490,6 +2557,11 @@ return function(mod)
       local sprite, px, py, facing, phase, flip, hopping = origPose(self)
       local lift = self.freeFlyAlt
       if lift and lift > 0 then
+        if state.diag and state.smoothX then
+          -- the smoothed glide: drawn on the diagonal while the cells
+          -- staircase beneath (see updateDiagonal)
+          px, py = state.smoothX, state.smoothY
+        end
         py = py - math.floor(lift + 0.5)
         local mount = Player.__freeFlyMount or Player.__freeFlyBird
         if mount then
@@ -2497,6 +2569,12 @@ return function(mod)
           phase = math.floor(love.timer.getTime()
                              * (self.freeFlyFlapRate or 8)) % 2
           flip = false
+          -- a directional mount faces the true diagonal while two
+          -- directions are held (see updateDiagonal)
+          if state.diag and (mount.def and (mount.def.directions or 0))
+             == 8 then
+            facing = state.diag
+          end
         end
       end
       return sprite, px, py, facing, phase, flip, hopping
@@ -2620,6 +2698,9 @@ return function(mod)
           end
           local lift = p.freeFlyAlt
           if lift and lift > 0 then
+            if state.diag and state.smoothX then
+              px, py = state.smoothX, state.smoothY
+            end
             py = py - math.floor(lift + 0.5)
             local mount = Player.__freeFlyMount or Player.__freeFlyBird
             if mount then
@@ -2627,6 +2708,10 @@ return function(mod)
               phase = math.floor(love.timer.getTime()
                 * (p.freeFlyFlapRate or 8)) % 2
               flip = false
+              if state.diag and (mount.def
+                 and (mount.def.directions or 0)) == 8 then
+                facing = state.diag
+              end
             end
           end
           return sprite, px, py, facing, phase, flip, hop
