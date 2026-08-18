@@ -22,8 +22,15 @@ T.check(api ~= nil, "exports registered")
 -- of the community-drawn sheets that survive the official-art filter)
 local def = api.sheetFor("MEWTWO", 150)
 T.check(def ~= nil, "Mewtwo has a sheet")
-T.eq(api.sheetFor("BULBASAUR", 1), nil,
-  "a species with no air animation answers nil (Walk is never shipped)")
+-- without a cartridge, a species outside the pack answers nil; with
+-- one, its own PMD Hover comes off the cart (every species has one)
+local bulba = api.sheetFor("BULBASAUR", 1)
+if api.romFile() then
+  T.check(bulba ~= nil and bulba.image:find("/rom/") ~= nil,
+    "a species outside the pack reads from the player's cartridge")
+else
+  T.eq(bulba, nil, "a species outside the pack answers nil (no cart)")
+end
 T.eq(def.directions, 8, "eight direction rows")
 T.check((def.frames or 0) > 1, "animated (the resolver's contract)")
 T.check(type(def.durations) == "table" and #def.durations == def.frames,
