@@ -240,6 +240,14 @@ Sky.PMD_ROWS = { down = 0, downright = 1, right = 2, upright = 3,
 Sky.ROW_NAMES = { "down", "downright", "right", "upright",
                   "up", "upleft", "left", "downleft" }  -- [row + 1]
 
+-- The engine's pose contract speaks FOUR facings, and third-party
+-- consumers (Battle Art's billboard tables, first-person yaw lookups)
+-- index by them; a diagonal name there is a nil lookup and a dead
+-- render pipeline.  Pose paths quantize through this; the true
+-- diagonal lives only in draw paths that declared they understand it.
+Sky.CARDINAL_OF = { upleft = "left", downleft = "left",
+                    upright = "right", downright = "right" }
+
 -- The 45-degree row a screen-space heading (radians, +y down) points
 -- at.  Sticky when the caller hands back its previous answer: the
 -- heading must cross 8 degrees past the sector boundary to change

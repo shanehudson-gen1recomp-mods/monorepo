@@ -316,7 +316,15 @@ return function(mod)
     -- Thick voxel characters need more clearance than flat billboards or the
     -- mount's body hides the trainer completely.  This ghost exists only in
     -- pipeline rendering; the flat path composes its own seated rider.
+    -- Airborne, p.sprite IS the mount renderer: a PMD mount's seat
+    -- rises with its drawn height, so the trainer clears a legendary's
+    -- back the same way it clears a Pidgey's.
     local clearance = 12
+    local mdef = p.sprite and p.sprite.def
+    if mdef and (mdef.directions or 0) == 8 and mdef.frameHeight then
+      clearance = math.max(12,
+        math.floor(mdef.frameHeight * (2 / 3) * 0.5))
+    end
     -- always the WALKING sheet: while airborne p.sprite is the mount
     return p.freeFlyWalkSprite or p.sprite, p.px, p.py - lift - clearance,
            p.facing, 0, false, false
@@ -2626,12 +2634,16 @@ return function(mod)
           phase = math.floor(love.timer.getTime()
                              * (self.freeFlyFlapRate or 8)) % 2
           flip = false
-          -- a directional mount faces the true diagonal while two
-          -- directions are held (see updateDiagonal), and every turn
-          -- sweeps a 45-degree notch at a time instead of snapping
+          -- the sweep keeps the turn state warm, but the pose
+          -- contract is the engine's four-way: a diagonal name here
+          -- nil-crashes third-party pipelines with four-frame facing
+          -- tables (Battle Art's billboards).  The stable cardinal of
+          -- the diagonal also beats the raw p.facing, which the
+          -- zigzag alternates between axes every cell.  The flat draw
+          -- keeps the true diagonal row.
           if (mount.def and (mount.def.directions or 0)) == 8 then
-            facing = Sky.smoothFacing(self, state.diag or facing)
-              or facing
+            local swept = Sky.smoothFacing(self, state.diag or facing)
+            facing = Sky.CARDINAL_OF[swept] or swept or facing
           end
         end
       end
@@ -2695,7 +2707,16 @@ return function(mod)
       -- hides the crop line, so the figure reads as seated behind its
       -- neck instead of a head floating above it
       local walk = self.freeFlyWalkSprite or self.sprite
-      walk:draw(gx, ry - math.floor(1 + 2 * s + 0.5),
+      -- the saddle: classic sheets seat by a small fixed nudge, a PMD
+      -- mount by a fraction of its drawn height (frames are authored
+      -- at 24px-to-the-tile, drawn at 2/3), so the figure sits on
+      -- Articuno's back instead of its tail feathers
+      local seat = 1 + 2 * s
+      if (bird.def and (bird.def.directions or 0)) == 8
+         and bird.def.frameHeight then
+        seat = math.max(seat, bird.def.frameHeight * (2 / 3) * 0.4 * s)
+      end
+      walk:draw(gx, ry - math.floor(seat + 0.5),
                 camX, camY, self.facing, 0, false, true)
       if s ~= 1 then
         local fx = math.floor(gx + 8 - camX)

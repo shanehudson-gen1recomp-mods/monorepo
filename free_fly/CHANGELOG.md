@@ -13,6 +13,15 @@
   drawn composite -- shadow, rider, mount, attitude anchors -- rides
   the diagonal glide, so nothing zips cell by cell under the gliding
   camera.
+- The pose contract stays the engine's four-way: pose serves the
+  diagonal's stable cardinal (better than the raw facing, which the
+  zigzag alternates every cell) while the flat draw keeps the true
+  diagonal row. Diagonal names in pose nil-crashed third-party voxel
+  pipelines with four-frame facing tables (Battle Art's billboards).
+- The rider sits on the mount's back at any size: the flat path's
+  saddle and the voxel rider ghost's clearance both scale with a PMD
+  mount's drawn frame height, so the trainer rides Articuno's back
+  instead of its tail feathers.
 - The flight-motion attitude sees the steady diagonal heading while
   zigzagging instead of the per-cell alternating axes, so the mount
   banks once into the turn and cruises level -- previously the bank

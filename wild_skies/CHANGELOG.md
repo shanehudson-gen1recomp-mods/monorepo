@@ -7,7 +7,10 @@
   a cardinal), with sticky sector boundaries so a flyer riding a
   45-degree line never strobes. Facing changes sweep one 45-degree
   notch at a time (shared skylib's headingFacing/smoothFacing), so
-  turns bank through the compass instead of snapping.
+  turns bank through the compass instead of snapping. Flyer pose
+  keeps the engine's four-way contract (the swept row quantizes to
+  its stable cardinal there), so third-party pipelines that index
+  four-frame facing tables never see a diagonal name.
 
 ## 1.11.0
 

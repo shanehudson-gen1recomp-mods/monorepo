@@ -1146,7 +1146,10 @@ return function(mod)
   function Flyer:pose()
     local facing = self.facing or (self.vx < 0 and "left" or "right")
     if self.sprite and self.sprite.directional then
-      facing = Sky.headingFacing(self, self.heading, facing)
+      -- the swept row keeps this flyer's turn state warm, but pose
+      -- consumers speak the engine's four-way contract
+      local swept = Sky.headingFacing(self, self.heading, facing)
+      facing = Sky.CARDINAL_OF[swept] or swept
     end
     return self.sprite, self.px, self.py - visualLift(self),
            facing, flapPhase(self), false, false

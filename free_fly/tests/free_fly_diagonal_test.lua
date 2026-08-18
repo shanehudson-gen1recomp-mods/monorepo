@@ -76,8 +76,11 @@ Player.__freeFlyMount = { def = { directions = 8 },
 
 held = { up = true, left = true }
 OC.__freeFlyTick(ow, 1 / 60)
+-- the pose contract is the engine's four-way (third-party pipelines
+-- index facing tables with it), so pose serves the diagonal's STABLE
+-- cardinal; the true diagonal row lives in the flat draw
 local _, _, _, facing = Player.pose(p)
-T.eq(facing, "upleft", "two held directions face the diagonal row")
+T.eq(facing, "left", "pose quantizes the diagonal to its cardinal")
 T.eq(Game.input:isDown("left"), false,
   "one axis is withheld from the engine for this cell")
 T.eq(Game.input:isDown("up"), true, "and the other passes through")
@@ -89,7 +92,8 @@ OC.__freeFlyTick(ow, 1 / 60)
 T.eq(Game.input:isDown("left"), true, "next cell exposes the other axis")
 T.eq(Game.input:isDown("up"), false, "and withholds the first")
 local _, _, _, facing2 = Player.pose(p)
-T.eq(facing2, "upleft", "the pose faces the diagonal the whole way")
+T.eq(facing2, "left",
+  "and holds it steady while the zigzag alternates axes")
 T.eq(Runtime.call("movement.speed", function(f) return f end, 8, {}), 6,
   "zigzag steps shorten so a diagonal tile costs straight-line time")
 
@@ -98,12 +102,12 @@ held = { up = true }
 OC.__freeFlyTick(ow, 1 / 60)
 T.eq(Game.input:isDown("up"), true, "single direction passes through")
 local _, _, _, facing3 = Player.pose(p)
-T.eq(facing3, "upleft",
+T.eq(facing3, "left",
   "the look holds through the corner grace, then sweeps back")
 for _ = 1, 6 do OC.__freeFlyTick(ow, 1 / 60) end  -- the grace expires
 p.__skyFacingT = -1  -- a notch interval elapses
 local _, _, _, facing4 = Player.pose(p)
-T.eq(facing4, "up", "and lands on the cardinal")
+T.eq(facing4, "up", "and lands on the released direction")
 T.eq(Runtime.call("movement.speed", function(f) return f end, 8, {}), 8,
   "cardinal flight keeps its full step speed")
 
