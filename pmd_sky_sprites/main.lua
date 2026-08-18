@@ -108,6 +108,56 @@ return function(mod)
     return rel
   end
 
+  -- A 16x16 card of the down-facing first frame, for voxel worlds
+  -- that cut a hard-coded 16x16 window from def.image (the shared
+  -- resolver swaps it in as the def's image; the sheet itself keeps
+  -- serving the directional draw).  ROM sheets never exist as files,
+  -- so the card bakes here, straight from the parsed pixels.
+  local function bakeRomCard(dex, sheet)
+    if not (love and love.image and love.image.newImageData
+            and love.graphics and love.graphics.newImage) then
+      return nil
+    end
+    local okD, id = pcall(love.image.newImageData, 16, 16)
+    if not (okD and id and id.setPixel) then return nil end
+    local fw, fh = sheet.fw, sheet.fh
+    local pal, canvas = sheet.palette, sheet.rows[1][1]
+    local sx, sy = fw / 16, fh / 16
+    local okP = pcall(function()
+      for ty = 0, 15 do
+        for tx = 0, 15 do
+          local x0, y0 = math.floor(tx * sx), math.floor(ty * sy)
+          local x1 = math.max(x0, math.ceil((tx + 1) * sx) - 1)
+          local y1 = math.max(y0, math.ceil((ty + 1) * sy) - 1)
+          local rs, gs, bs, hit, n = 0, 0, 0, 0, 0
+          for y = y0, math.min(y1, fh - 1) do
+            for x = x0, math.min(x1, fw - 1) do
+              local v = canvas[y * fw + x + 1]
+              if v then
+                local c = pal[v + 1]
+                rs, gs, bs = rs + c[1], gs + c[2], bs + c[3]
+                hit = hit + 1
+              end
+              n = n + 1
+            end
+          end
+          if n > 0 and hit / n >= 0.25 then
+            id:setPixel(tx, ty, rs / hit / 255, gs / hit / 255,
+              bs / hit / 255, 1)
+          else
+            id:setPixel(tx, ty, 0, 0, 0, 0)
+          end
+        end
+      end
+    end)
+    if not okP then return nil end
+    local okI, img = pcall(love.graphics.newImage, id)
+    if not okI then return nil end
+    local rel = ROM_PREFIX .. ("card/%04d.png"):format(dex)
+    if not registerRomImage(rel, img) then return nil end
+    return rel
+  end
+
   local romName
   for _, name in ipairs(mod:list("") or {}) do
     if name:lower():match("%.nds$") then romName = name; break end
@@ -156,6 +206,7 @@ return function(mod)
     if not path then return nil end
     romRecs[dex] = {
       path = path, anim = a.anim, subset = a.subset,
+      card = bakeRomCard(dex, sheet),
       fw = sheet.fw, fh = sheet.fh,
       frames = sheet.frames, durations = sheet.durations,
     }
@@ -171,6 +222,7 @@ return function(mod)
     return {
       id = "PMD_SKY_" .. tostring(species),
       image = rec.path or (BASE .. "sprites/" .. rec.file),
+      cardImage = rec.card,
       frames = rec.frames,
       frameWidth = rec.fw, frameHeight = rec.fh,
       directions = 8, durations = rec.durations,

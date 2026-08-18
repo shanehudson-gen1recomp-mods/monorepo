@@ -17,6 +17,12 @@
   Skarmory), so dex-as-slot dressed Articuno in Ditto's art and
   Aerodactyl in Gyarados'. Both the in-game reader and the offline
   extractor read the table; a fixture monster.md pins the mapping.
+- Voxel overworlds (the Dramatic Shape family, Battle Art) show the
+  creature instead of a corner sliver of its sheet: every def carries
+  a 16x16 card of the down-facing first frame (ROM sheets bake theirs
+  straight from the parsed pixels), the shared resolver swaps it in as
+  the def's image for the card-window consumers, and the directional
+  draw keeps the whole sheet.
 - PX decompression fixed against SkyTemple's spec: two of the nine
   control-flag nibble patterns decoded one too high, corrupting the
   occasional metaframe index and animation timing.

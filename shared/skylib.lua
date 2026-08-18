@@ -332,13 +332,90 @@ local function pmdFrame(def, t)
   return 0
 end
 
+-- ------- 16x16 cards (shared by the portrait bake below and the
+-- directional-sheet bake): voxel overworld mods draw each figure as
+-- one flat card UV-mapped to a hard-coded 16x16 window of def.image,
+-- so any def whose image is bigger than one figure needs a real 16x16
+-- image standing in.  The baked card never touches the filesystem;
+-- every consumer of def.image resolves through the engine's
+-- Assets.image choke point, so one shared wrap serves cards from
+-- memory under virtual paths.
+local CARD = 16
+local CARD_PREFIX = "sky_family/card/"
+
+local function registerCard(rel, image)
+  local okA, Assets = pcall(require, "src.render.Assets")
+  if not (okA and type(Assets) == "table"
+          and type(Assets.image) == "function") then
+    return false
+  end
+  local cards = Assets.__skyFamilyCards
+  if not cards then
+    cards = {}
+    Assets.__skyFamilyCards = cards
+    local origImage = Assets.image
+    Assets.image = function(path, ...)
+      local card = cards[path]
+      if card then return card end
+      return origImage(path, ...)
+    end
+  end
+  cards[rel] = image
+  return true
+end
+
+-- box-filter one region of an ImageData down to a registered 16x16
+-- card (alpha thresholded so the silhouette stays crisp)
+local function bakeCardRegion(id, rx, ry, w, h, rel, threshold)
+  local okS, small = pcall(love.image.newImageData, CARD, CARD)
+  if not (okS and small and small.setPixel) then return nil end
+  local sx, sy = w / CARD, h / CARD
+  local okP = pcall(function()
+    for ty = 0, CARD - 1 do
+      for tx = 0, CARD - 1 do
+        local x0, y0 = math.floor(tx * sx), math.floor(ty * sy)
+        local x1 = math.max(x0, math.ceil((tx + 1) * sx) - 1)
+        local y1 = math.max(y0, math.ceil((ty + 1) * sy) - 1)
+        local rs, gs, bs, as, n = 0, 0, 0, 0, 0
+        for y = y0, math.min(y1, h - 1) do
+          for x = x0, math.min(x1, w - 1) do
+            local r, g, b, a = id:getPixel(rx + x, ry + y)
+            rs, gs, bs = rs + r * a, gs + g * a, bs + b * a
+            as, n = as + a, n + 1
+          end
+        end
+        if n > 0 and as / n >= (threshold or 0.35) then
+          small:setPixel(tx, ty, rs / as, gs / as, bs / as, 1)
+        else
+          small:setPixel(tx, ty, 0, 0, 0, 0)
+        end
+      end
+    end
+  end)
+  if not okP then return nil end
+  local okI, img = pcall(love.graphics.newImage, small)
+  if not okI then return nil end
+  if not registerCard(rel, img) then return nil end
+  return img, rel
+end
+
 -- the draw for a directional sheet: row by facing, frame by the def's
--- durations, mirroring nothing (all eight rows are authored)
-local function directionalDraw(renderer, def)
+-- durations, mirroring nothing (all eight rows are authored).  When
+-- the def's image was swapped for a 16x16 card (the voxel families'
+-- sake), sheetPath still names the real sheet, resolved through the
+-- same Assets.image choke point that serves virtual paths.
+local function directionalDraw(renderer, def, sheetPath)
   local quads = {}
   local rows = def.rows or Sky.PMD_ROWS
+  local sheet
   return function(self, px, py, camX, camY, facing, walkPhase)
-    local image = self.resolveImage and self:resolveImage() or self.image
+    if sheet == nil and sheetPath then
+      local okA, Assets = pcall(require, "src.render.Assets")
+      local okI, img = pcall(function() return Assets.image(sheetPath) end)
+      sheet = (okA and okI and img) or false
+    end
+    local image = sheet or (self.resolveImage and self:resolveImage())
+      or self.image
     if not image then return end
     local row = rows[facing] or rows.down or 0
     local frame = pmdFrame(def, (love.timer and love.timer.getTime
@@ -395,7 +472,40 @@ local function borrowedSprite(data, species, dex, seedPrefix)
           if okR and renderer then
             renderer.skySource = tostring(source.mod or source.id)
             if (def.directions or 0) == 8 then
-              renderer.draw = directionalDraw(renderer, def)
+              -- voxel families cut a hard-coded 16x16 window from
+              -- def.image, and a sheet's corner is a sliver of one
+              -- big frame; a card of the down-facing first frame
+              -- stands in as def.image while the directional draw
+              -- keeps the whole sheet.  A source can hand a
+              -- pre-baked card (def.cardImage, e.g. ROM sheets that
+              -- never exist as files); otherwise one bakes here.
+              local sheetPath = def.image
+              local card, cardPath
+              if def.cardImage then
+                cardPath = def.cardImage
+                local okA, Assets = pcall(require, "src.render.Assets")
+                if okA and type(Assets) == "table" and Assets.image then
+                  local okI, img = pcall(Assets.image, cardPath)
+                  if okI then card = img end
+                end
+              else
+                local okD, idata = pcall(love.image.newImageData,
+                  sheetPath)
+                if okD and idata then
+                  card = bakeCardRegion(idata, 0, 0,
+                    def.frameWidth or CARD, def.frameHeight or CARD,
+                    CARD_PREFIX .. "sheet_"
+                      .. tostring(species):gsub("[^%w_]", "_") .. ".png",
+                    0.25)
+                  cardPath = card and (CARD_PREFIX .. "sheet_"
+                    .. tostring(species):gsub("[^%w_]", "_") .. ".png")
+                end
+              end
+              if card and cardPath then
+                def.image = cardPath
+                renderer.image = card
+              end
+              renderer.draw = directionalDraw(renderer, def, sheetPath)
               -- callers steer 8-way art by true heading (Sky.headingFacing)
               renderer.directional = true
             end
@@ -457,63 +567,10 @@ local picCache = {}
 -- there serves our cards from memory under virtual paths and hands
 -- every other path straight on.  One wrap and one registry are shared
 -- by every sky-family mod's copy of this library.
-local CARD = 16
-local CARD_PREFIX = "sky_family/card/"
-
-local function registerCard(rel, image)
-  local okA, Assets = pcall(require, "src.render.Assets")
-  if not (okA and type(Assets) == "table"
-          and type(Assets.image) == "function") then
-    return false
-  end
-  local cards = Assets.__skyFamilyCards
-  if not cards then
-    cards = {}
-    Assets.__skyFamilyCards = cards
-    local origImage = Assets.image
-    Assets.image = function(path, ...)
-      local card = cards[path]
-      if card then return card end
-      return origImage(path, ...)
-    end
-  end
-  cards[rel] = image
-  return true
-end
-
 local function bakeCardPic(id, size, w, h, species)
-  local okS, small = pcall(love.image.newImageData, CARD, CARD)
-  if not (okS and small and small.setPixel) then return nil end
-  local step = size / CARD
-  local okP = pcall(function()
-    for ty = 0, CARD - 1 do
-      for tx = 0, CARD - 1 do
-        local x0, y0 = math.floor(tx * step), math.floor(ty * step)
-        local x1 = math.max(x0, math.ceil((tx + 1) * step) - 1)
-        local y1 = math.max(y0, math.ceil((ty + 1) * step) - 1)
-        local rs, gs, bs, as, n = 0, 0, 0, 0, 0
-        for y = y0, math.min(y1, h - 1) do
-          for x = x0, math.min(x1, w - 1) do
-            local r, g, b, a = id:getPixel(x, y)
-            rs, gs, bs = rs + r * a, gs + g * a, bs + b * a
-            as, n = as + a, n + 1
-          end
-        end
-        if n > 0 and as / n >= 0.35 then
-          small:setPixel(tx, ty, rs / as, gs / as, bs / as, 1)
-        else
-          small:setPixel(tx, ty, 0, 0, 0, 0)
-        end
-      end
-    end
-  end)
-  if not okP then return nil end
-  local okI, img = pcall(love.graphics.newImage, small)
-  if not okI then return nil end
   local rel = CARD_PREFIX .. tostring(species):gsub("[^%w_]", "_")
     .. ".png"
-  if not registerCard(rel, img) then return nil end
-  return img, rel
+  return bakeCardRegion(id, 0, 0, w, h, rel)
 end
 
 local function goldPicRenderer(data, species, seedPrefix)
