@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.1
+
+- Fix: lead-choice mods ("Trainers Let You Choose Lead Pokemon" 2.0.1)
+  no longer glitch our trainer doubles. Those mods replace
+  battle.player with a freshly built battler during the intro, with no
+  battler_switched (an initial send-out is not a switch), so our pair
+  state kept anchors and slots pointed at the old body. The decoration
+  now re-anchors itself the moment it sees a lead it never fielded:
+  the new lead gets the lead anchor, and picking the mon already
+  standing beside you swaps the pair (the old lead steps into the
+  partner slot) instead of silently dropping the partner and its
+  windows mid-intro.
+
 ## 0.6.0
 
 - TRAINER PAIRS: two unfought trainers standing side by side now fight
