@@ -1,17 +1,31 @@
 PMD Sky Sprites
 by Shane Hudson, art by the PMDCollab SpriteCollab community
+and, optionally, your own Explorers of Sky cartridge
 
 WHAT IT DOES
 Dresses the sky: wild flyers and your FLY mount wear PMD-style
-community animation sheets, eight facing directions each. With Free
-Fly 1.7.0+, an eight-direction mount can fly true diagonals.
+animation sheets, eight facing directions each. With Free Fly 1.7.0+,
+an eight-direction mount can fly true diagonals, and turns sweep
+through the diagonal rows.
+
+YOUR OWN CARTRIDGE (OPTIONAL, FOR FULL COVERAGE)
+The mod ships community-redrawn art only, which covers a small
+roster. For every one of the first 251 species, supply your own game:
+put a cartridge dump of Pokemon Mystery Dungeon: Explorers of Sky
+(US) -- a .nds file -- inside this mod's folder. The official in-air
+animations are then read straight off your cart while you play,
+matched per species through the game's own tables. Everything stays
+in memory: nothing is extracted to disk and nothing official ever
+ships with the mod. The IMPORT PMD option in the mod's settings
+turns cartridge reading off. Community sheets still win where they
+exist.
 
 WHAT IT DOES NOT DO
 Ship any official sprite. Sheets credited to Spike Chunsoft (the
-official PMD art) are excluded, which currently limits coverage to
-the species the community has redrawn. Nothing changes on the ground,
-in battles, or for species without a community sheet.
+official PMD art) are excluded from the pack; official art only ever
+comes from a cartridge you supply. Nothing changes on the ground or
+in battles.
 
 CREDITS
-Every sheet is CC BY-NC 4.0 by its SpriteCollab contributors; the
-full per-species credit log ships in CREDITS.md.
+Every packed sheet is CC BY-NC 4.0 by its SpriteCollab contributors;
+the full per-species credit log ships in CREDITS.md.
