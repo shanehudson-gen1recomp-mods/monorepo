@@ -122,17 +122,23 @@ return function(mod)
     if not (okD and id and id.setPixel) then return nil end
     local fw, fh = sheet.fw, sheet.fh
     local pal, canvas = sheet.palette, sheet.rows[1][1]
-    local sx, sy = fw / 16, fh / 16
+    -- square and bottom-anchored, so the silhouette keeps its aspect
+    local side = math.max(fw, fh)
+    local rx = -math.floor((side - fw) / 2)
+    local ry = fh - side
+    local step = side / 16
     local okP = pcall(function()
       for ty = 0, 15 do
         for tx = 0, 15 do
-          local x0, y0 = math.floor(tx * sx), math.floor(ty * sy)
-          local x1 = math.max(x0, math.ceil((tx + 1) * sx) - 1)
-          local y1 = math.max(y0, math.ceil((ty + 1) * sy) - 1)
+          local x0, y0 = math.floor(tx * step), math.floor(ty * step)
+          local x1 = math.max(x0, math.ceil((tx + 1) * step) - 1)
+          local y1 = math.max(y0, math.ceil((ty + 1) * step) - 1)
           local rs, gs, bs, hit, n = 0, 0, 0, 0, 0
-          for y = y0, math.min(y1, fh - 1) do
-            for x = x0, math.min(x1, fw - 1) do
-              local v = canvas[y * fw + x + 1]
+          for y = y0, y1 do
+            for x = x0, x1 do
+              local cx, cy = rx + x, ry + y
+              local v = cx >= 0 and cy >= 0 and cx < fw and cy < fh
+                and canvas[cy * fw + cx + 1] or nil
               if v then
                 local c = pal[v + 1]
                 rs, gs, bs = rs + c[1], gs + c[2], bs + c[3]

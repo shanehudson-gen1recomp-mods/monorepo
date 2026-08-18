@@ -321,9 +321,9 @@ return function(mod)
     -- back the same way it clears a Pidgey's.
     local clearance = 12
     local mdef = p.sprite and p.sprite.def
-    if mdef and (mdef.directions or 0) == 8 and mdef.frameHeight then
-      clearance = math.max(12,
-        math.floor(mdef.frameHeight * (2 / 3) * 0.5))
+    local mfh = mdef and (mdef.sheetFrameHeight or mdef.frameHeight)
+    if mdef and (mdef.directions or 0) == 8 and mfh then
+      clearance = math.max(12, math.floor(mfh * (2 / 3) * 0.5))
     end
     -- always the WALKING sheet: while airborne p.sprite is the mount
     return p.freeFlyWalkSprite or p.sprite, p.px, p.py - lift - clearance,
@@ -2712,9 +2712,10 @@ return function(mod)
       -- at 24px-to-the-tile, drawn at 2/3), so the figure sits on
       -- Articuno's back instead of its tail feathers
       local seat = 1 + 2 * s
-      if (bird.def and (bird.def.directions or 0)) == 8
-         and bird.def.frameHeight then
-        seat = math.max(seat, bird.def.frameHeight * (2 / 3) * 0.4 * s)
+      local bfh = bird.def and (bird.def.sheetFrameHeight
+        or bird.def.frameHeight)
+      if (bird.def and (bird.def.directions or 0)) == 8 and bfh then
+        seat = math.max(seat, bfh * (2 / 3) * 0.4 * s)
       end
       walk:draw(gx, ry - math.floor(seat + 0.5),
                 camX, camY, self.facing, 0, false, true)

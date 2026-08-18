@@ -365,10 +365,15 @@ local function registerCard(rel, image)
 end
 
 -- box-filter one region of an ImageData down to a registered 16x16
--- card (alpha thresholded so the silhouette stays crisp)
+-- card (alpha thresholded so the silhouette stays crisp).  The
+-- sampled region may reach outside the image: those samples read as
+-- transparent, which is how a rectangular frame keeps its aspect
+-- inside the square card (the caller passes a square, bottom-anchored
+-- region around the frame).
 local function bakeCardRegion(id, rx, ry, w, h, rel, threshold)
   local okS, small = pcall(love.image.newImageData, CARD, CARD)
   if not (okS and small and small.setPixel) then return nil end
+  local iw, ih = id:getWidth(), id:getHeight()
   local sx, sy = w / CARD, h / CARD
   local okP = pcall(function()
     for ty = 0, CARD - 1 do
@@ -377,14 +382,18 @@ local function bakeCardRegion(id, rx, ry, w, h, rel, threshold)
         local x1 = math.max(x0, math.ceil((tx + 1) * sx) - 1)
         local y1 = math.max(y0, math.ceil((ty + 1) * sy) - 1)
         local rs, gs, bs, as, n = 0, 0, 0, 0, 0
-        for y = y0, math.min(y1, h - 1) do
-          for x = x0, math.min(x1, w - 1) do
-            local r, g, b, a = id:getPixel(rx + x, ry + y)
-            rs, gs, bs = rs + r * a, gs + g * a, bs + b * a
-            as, n = as + a, n + 1
+        for y = y0, y1 do
+          for x = x0, x1 do
+            local px, py = rx + x, ry + y
+            if px >= 0 and py >= 0 and px < iw and py < ih then
+              local r, g, b, a = id:getPixel(px, py)
+              rs, gs, bs = rs + r * a, gs + g * a, bs + b * a
+              as = as + a
+            end
+            n = n + 1
           end
         end
-        if n > 0 and as / n >= (threshold or 0.35) then
+        if n > 0 and as > 0 and as / n >= (threshold or 0.35) then
           small:setPixel(tx, ty, rs / as, gs / as, bs / as, 1)
         else
           small:setPixel(tx, ty, 0, 0, 0, 0)
@@ -407,6 +416,9 @@ end
 local function directionalDraw(renderer, def, sheetPath)
   local quads = {}
   local rows = def.rows or Sky.PMD_ROWS
+  -- captured now: the def's frame box gets swapped to the 16x16 card
+  -- after this factory runs, and the sheet geometry must survive that
+  local fw, fh = def.frameWidth, def.frameHeight
   local sheet
   return function(self, px, py, camX, camY, facing, walkPhase)
     if sheet == nil and sheetPath then
@@ -424,8 +436,7 @@ local function directionalDraw(renderer, def, sheetPath)
     local quad = quads[key]
     if not quad then
       local okQ, q = pcall(love.graphics.newQuad,
-        frame * def.frameWidth, row * def.frameHeight,
-        def.frameWidth, def.frameHeight,
+        frame * fw, row * fh, fw, fh,
         image:getWidth(), image:getHeight())
       if not okQ then return end
       quad = q
@@ -439,8 +450,8 @@ local function directionalDraw(renderer, def, sheetPath)
     local fx = px + 8 - camX
     local fy = py + 12 - camY
     love.graphics.draw(image, quad,
-      math.floor(fx - def.frameWidth * k / 2),
-      math.floor(fy - def.frameHeight * k),
+      math.floor(fx - fw * k / 2),
+      math.floor(fy - fh * k),
       0, k, k)
   end
 end
@@ -472,14 +483,20 @@ local function borrowedSprite(data, species, dex, seedPrefix)
           if okR and renderer then
             renderer.skySource = tostring(source.mod or source.id)
             if (def.directions or 0) == 8 then
-              -- voxel families cut a hard-coded 16x16 window from
-              -- def.image, and a sheet's corner is a sliver of one
-              -- big frame; a card of the down-facing first frame
-              -- stands in as def.image while the directional draw
-              -- keeps the whole sheet.  A source can hand a
-              -- pre-baked card (def.cardImage, e.g. ROM sheets that
-              -- never exist as files); otherwise one bakes here.
+              -- voxel families cut a 16x16 window from def.image and
+              -- size it by the def's frame box, so a sheet def shows
+              -- a sliver of one big frame at the wrong scale.  A
+              -- 16x16 card of the down-facing first frame stands in
+              -- as the def's image AND frame box; the directional
+              -- draw, wired first, keeps the real sheet geometry.  A
+              -- source can hand a pre-baked card (def.cardImage, e.g.
+              -- ROM sheets that never exist as files); otherwise one
+              -- bakes here from the sheet file, square and
+              -- bottom-anchored so the silhouette keeps its aspect.
               local sheetPath = def.image
+              renderer.draw = directionalDraw(renderer, def, sheetPath)
+              -- callers steer 8-way art by true heading (Sky.headingFacing)
+              renderer.directional = true
               local card, cardPath
               if def.cardImage then
                 cardPath = def.cardImage
@@ -492,22 +509,25 @@ local function borrowedSprite(data, species, dex, seedPrefix)
                 local okD, idata = pcall(love.image.newImageData,
                   sheetPath)
                 if okD and idata then
-                  card = bakeCardRegion(idata, 0, 0,
-                    def.frameWidth or CARD, def.frameHeight or CARD,
-                    CARD_PREFIX .. "sheet_"
-                      .. tostring(species):gsub("[^%w_]", "_") .. ".png",
-                    0.25)
-                  cardPath = card and (CARD_PREFIX .. "sheet_"
-                    .. tostring(species):gsub("[^%w_]", "_") .. ".png")
+                  local fw = def.frameWidth or CARD
+                  local fh = def.frameHeight or CARD
+                  local side = math.max(fw, fh)
+                  local rel = CARD_PREFIX .. "sheet_"
+                    .. tostring(species):gsub("[^%w_]", "_") .. ".png"
+                  card = bakeCardRegion(idata,
+                    -math.floor((side - fw) / 2), fh - side,
+                    side, side, rel, 0.25)
+                  cardPath = card and rel
                 end
               end
               if card and cardPath then
+                def.sheetImage = sheetPath
+                def.sheetFrameWidth = def.frameWidth
+                def.sheetFrameHeight = def.frameHeight
                 def.image = cardPath
+                def.frameWidth, def.frameHeight = CARD, CARD
                 renderer.image = card
               end
-              renderer.draw = directionalDraw(renderer, def, sheetPath)
-              -- callers steer 8-way art by true heading (Sky.headingFacing)
-              renderer.directional = true
             end
           end
           sourceCache[key] = okR and renderer or false
