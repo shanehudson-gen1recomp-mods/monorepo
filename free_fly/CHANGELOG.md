@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.8.0
+
+- A directional mount now sweeps its facing one 45-degree notch at a
+  time (through the diagonal rows) on every turn, instead of snapping
+  across the compass; entering and leaving diagonal flight eases the
+  same way. The flat draw path gained the diagonal facing it was
+  missing (previously only the pose pipelines faced the diagonal).
+- Diagonal flight moves at the same speed the eye sees on a straight
+  line: the zigzag's steps shorten by 1/sqrt(2) while both directions
+  are held (the uncompensated zigzag flew ~30% slower), and the whole
+  drawn composite -- shadow, rider, mount, attitude anchors -- rides
+  the diagonal glide, so nothing zips cell by cell under the gliding
+  camera.
+- The flight-motion attitude sees the steady diagonal heading while
+  zigzagging instead of the per-cell alternating axes, so the mount
+  banks once into the turn and cruises level -- previously the bank
+  whipped its sign every cell, which read as frantic flapping. The
+  lean now mirrors correctly on the left diagonals too.
+- Leaving the diagonal no longer pops: the glide eases back onto the
+  stepped position (mount and camera both) instead of snapping off in
+  one frame, the glide's trailing distance is now frame-rate
+  independent, and rolling off a corner holds the diagonal look for a
+  beat so sloppy input never flickers -- the engine gets its full
+  input back immediately, so movement itself never stalls.
+
 ## 1.7.0
 
 - Diagonal flight: on a mount whose sheet carries all eight facing

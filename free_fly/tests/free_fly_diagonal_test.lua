@@ -90,13 +90,22 @@ T.eq(Game.input:isDown("left"), true, "next cell exposes the other axis")
 T.eq(Game.input:isDown("up"), false, "and withholds the first")
 local _, _, _, facing2 = Player.pose(p)
 T.eq(facing2, "upleft", "the pose faces the diagonal the whole way")
+T.eq(Runtime.call("movement.speed", function(f) return f end, 8, {}), 6,
+  "zigzag steps shorten so a diagonal tile costs straight-line time")
 
 -- releasing a direction restores plain four-way flight
 held = { up = true }
 OC.__freeFlyTick(ow, 1 / 60)
 T.eq(Game.input:isDown("up"), true, "single direction passes through")
 local _, _, _, facing3 = Player.pose(p)
-T.eq(facing3, "up", "and the pose faces the cardinal")
+T.eq(facing3, "upleft",
+  "the look holds through the corner grace, then sweeps back")
+for _ = 1, 6 do OC.__freeFlyTick(ow, 1 / 60) end  -- the grace expires
+p.__skyFacingT = -1  -- a notch interval elapses
+local _, _, _, facing4 = Player.pose(p)
+T.eq(facing4, "up", "and lands on the cardinal")
+T.eq(Runtime.call("movement.speed", function(f) return f end, 8, {}), 8,
+  "cardinal flight keeps its full step speed")
 
 -- a four-way mount never diagonals
 Player.__freeFlyMount = { def = {}, __freeFlyAirSheet = true }

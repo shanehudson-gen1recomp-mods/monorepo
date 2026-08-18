@@ -489,7 +489,17 @@ return function(mod)
   end)
 
   mod.hooks:wrap("movement.speed", function(next, frames, ctx)
-    if flying() then return math.min(frames, flyFrames()) end
+    if flying() then
+      local f = math.min(frames, flyFrames())
+      -- a zigzag cell advances only one axis, so an uncompensated
+      -- diagonal flies ~30% slower than a straight line; shorter
+      -- steps while zigzagging make a diagonal tile cost the same
+      -- time it does in PMD itself
+      if state.diagStepping then
+        f = math.max(1, math.floor(f * 0.707 + 0.5))
+      end
+      return f
+    end
     return next(frames, ctx)
   end)
 
@@ -1696,10 +1706,34 @@ return function(mod)
     end
     local DROP_HORIZONTAL = { left = true, right = true }
     local DROP_VERTICAL = { up = true, down = true }
-    local function updateDiagonal(p)
+    -- the glide's catch-up rate: 1 - exp(-15 * dt) matches the old
+    -- per-tick 0.22 at 60fps, but holds the same trailing distance at
+    -- any frame rate
+    local GLIDE_RATE = 15
+    -- after the diagonal ends the glide eases back onto the stepped
+    -- position instead of snapping (the old nil-out popped the mount
+    -- and the camera up to half a cell in one frame)
+    local function easeGlide(p, dt)
+      if not state.smoothX then return end
+      local k = 1 - math.exp(-GLIDE_RATE * (dt or 1 / 60))
+      state.smoothX = state.smoothX + (p.px - state.smoothX) * k
+      state.smoothY = state.smoothY + (p.py - state.smoothY) * k
+      if not state.diag
+         and math.abs(p.px - state.smoothX) < 0.5
+         and math.abs(p.py - state.smoothY) < 0.5 then
+        state.smoothX, state.smoothY = nil, nil
+      end
+    end
+    -- rolling from two held directions to one passes through
+    -- single-key frames; the diagonal LOOK (facing, glide) holds for
+    -- a beat so a sloppy corner does not flicker, while the input
+    -- drop releases immediately so movement never stalls
+    local DIAG_GRACE = 0.08
+    local function updateDiagonal(p, dt)
       if not (Game.input and Game.input.__freeFlyRawIsDown) then return end
       if not (p and p.freeFlying and mountDirectional()) then
-        state.diag, state.diagCell = nil, nil
+        state.diag, state.diagCell, state.diagGrace = nil, nil, nil
+        state.diagStepping = nil
         state.smoothX, state.smoothY = nil, nil
         Game.input.__freeFlyDiagDrop = nil
         return
@@ -1711,11 +1745,25 @@ return function(mod)
       local r = raw(Game.input, "right")
       local diag = (u and l and "upleft") or (u and r and "upright")
         or (d and l and "downleft") or (d and r and "downright")
+      if not diag and state.diag and (u or d or l or r)
+         and (state.diagGrace or 0) < DIAG_GRACE then
+        state.diagGrace = (state.diagGrace or 0) + (dt or 1 / 60)
+        diag = state.diag
+      elseif diag then
+        state.diagGrace = 0
+      end
       state.diag = diag
+      state.diagStepping = nil
       if not diag then
-        state.diagCell = nil
-        state.smoothX, state.smoothY = nil, nil
+        state.diagCell, state.diagGrace = nil, nil
         Game.input.__freeFlyDiagDrop = nil
+        easeGlide(p, dt)
+        return
+      end
+      if state.diagGrace and state.diagGrace > 0 then
+        -- grace: the look holds, the engine gets the full input back
+        Game.input.__freeFlyDiagDrop = nil
+        easeGlide(p, dt)
         return
       end
       local cell = tostring(p.cellX) .. ":" .. tostring(p.cellY)
@@ -1725,14 +1773,13 @@ return function(mod)
       end
       Game.input.__freeFlyDiagDrop = state.diagVert and DROP_HORIZONTAL
         or DROP_VERTICAL
+      state.diagStepping = true
       -- the drawn mount and the camera glide the diagonal while the
-      -- cells staircase beneath: a low-pass over the true position
-      -- (see the pose and the camera follow)
+      -- cells staircase beneath (see the pose and the camera follow)
       if not state.smoothX then
         state.smoothX, state.smoothY = p.px, p.py
       end
-      state.smoothX = state.smoothX + (p.px - state.smoothX) * 0.22
-      state.smoothY = state.smoothY + (p.py - state.smoothY) * 0.22
+      easeGlide(p, dt)
     end
 
     OC.__freeFlyTick = function(ow, dt)
@@ -1747,7 +1794,7 @@ return function(mod)
       if ensurePF then ensurePF() end
       local p = ow.player
       if not p then return end
-      updateDiagonal(p)
+      updateDiagonal(p, dt)
       if not Sky.goldWorld(ow) then
         pcall(dressWrappedFollower, Game, ow)
       end
@@ -2116,10 +2163,19 @@ return function(mod)
       -- flight state; the shared math does the leaning
       local HEADINGS = { right = 0, down = math.pi / 2,
                          left = math.pi, up = -math.pi / 2 }
+      -- a zigzag cell alternates p.facing between the two held axes;
+      -- the attitude must see the steady diagonal instead, or the
+      -- bank whips its sign every cell and the mount reads as
+      -- flapping in a frenzy
+      local DIAG_HEADINGS = { downright = math.pi / 4,
+                              downleft = 3 * math.pi / 4,
+                              upleft = -3 * math.pi / 4,
+                              upright = -math.pi / 4 }
       state.motion = state.motion or { flap = 8 }
-      state.motion.heading = HEADINGS[p.facing] or 0
+      state.motion.heading = (state.diag and DIAG_HEADINGS[state.diag])
+        or HEADINGS[p.facing] or 0
       state.motion.alt = state.alt
-      state.motion.facing = p.facing
+      state.motion.facing = state.diag or p.facing
       state.motion.mode = flying() and "roam" or "ground"
       state.motion.t = (state.motion.t or 0) + dt
       Sky.flightAttitude(state.motion, dt)
@@ -2182,7 +2238,7 @@ return function(mod)
       end
       if not Sky.goldWorld(ow) then
         local cfx, cfy = p.px, p.py
-        if state.diag and state.smoothX then
+        if state.smoothX then
           cfx, cfy = state.smoothX, state.smoothY
         end
         ow.camera:follow(cfx, cfy - camLift,
@@ -2557,9 +2613,10 @@ return function(mod)
       local sprite, px, py, facing, phase, flip, hopping = origPose(self)
       local lift = self.freeFlyAlt
       if lift and lift > 0 then
-        if state.diag and state.smoothX then
+        if state.smoothX then
           -- the smoothed glide: drawn on the diagonal while the cells
-          -- staircase beneath (see updateDiagonal)
+          -- staircase beneath, and easing back after it ends
+          -- (see updateDiagonal)
           px, py = state.smoothX, state.smoothY
         end
         py = py - math.floor(lift + 0.5)
@@ -2570,10 +2627,11 @@ return function(mod)
                              * (self.freeFlyFlapRate or 8)) % 2
           flip = false
           -- a directional mount faces the true diagonal while two
-          -- directions are held (see updateDiagonal)
-          if state.diag and (mount.def and (mount.def.directions or 0))
-             == 8 then
-            facing = state.diag
+          -- directions are held (see updateDiagonal), and every turn
+          -- sweeps a 45-degree notch at a time instead of snapping
+          if (mount.def and (mount.def.directions or 0)) == 8 then
+            facing = Sky.smoothFacing(self, state.diag or facing)
+              or facing
           end
         end
       end
@@ -2589,6 +2647,12 @@ return function(mod)
       if not (lift and lift > 0 and bird) then
         return origDraw(self, camX, camY)
       end
+      -- while the glide exists, the whole composite (shadow, rider,
+      -- mount, transform anchors) draws on it, so the diagonal reads
+      -- as one steady line at cruise speed instead of cells zipping
+      -- along alternating axes under a gliding camera
+      local gx, gy = self.px, self.py
+      if state.smoothX then gx, gy = state.smoothX, state.smoothY end
       -- the shadow shrinks with height and turns green over landable
       -- ground, so B-to-land reads at a glance; it stays flat below
       -- the attitude transform
@@ -2599,7 +2663,7 @@ return function(mod)
       end
       local s = (Player.__freeFlyMountScale or 1) * sizeMult()
       local r = math.max(3, 7 - lift / 16) * s
-      love.graphics.ellipse("fill", self.px + 8 - camX, self.py + 13 - camY,
+      love.graphics.ellipse("fill", gx + 8 - camX, gy + 13 - camY,
                             r, r * 0.4)
       love.graphics.setColor(1, 1, 1, 1)
       local angle, squash = 0, 1
@@ -2608,32 +2672,40 @@ return function(mod)
       end
       local spun = angle ~= 0 or squash ~= 1
       if spun then
-        local ax = math.floor(self.px + 8 - camX)
-        local ay = math.floor(self.py - lift + 8 - camY)
+        local ax = math.floor(gx + 8 - camX)
+        local ay = math.floor(gy - lift + 8 - camY)
         love.graphics.push()
         love.graphics.translate(ax, ay)
         love.graphics.rotate(angle)
         love.graphics.scale(1, squash)
         love.graphics.translate(-ax, -ay)
       end
-      local ry = self.py - math.floor(lift + 0.5)
+      local ry = gy - math.floor(lift + 0.5)
       local flap = math.floor(love.timer.getTime()
                               * (self.freeFlyFlapRate or 8)) % 2
+      -- the mount's facing: the true diagonal while two directions are
+      -- held, swept a notch at a time; the seated rider keeps the
+      -- engine's four-way facing its own sheet expects
+      local mountFacing = self.facing
+      if (bird.def and (bird.def.directions or 0)) == 8 then
+        mountFacing = Sky.smoothFacing(self, state.diag or self.facing)
+          or self.facing
+      end
       -- rider FIRST, tucked low, then the mount over it: the mount's body
       -- hides the crop line, so the figure reads as seated behind its
       -- neck instead of a head floating above it
       local walk = self.freeFlyWalkSprite or self.sprite
-      walk:draw(self.px, ry - math.floor(1 + 2 * s + 0.5),
+      walk:draw(gx, ry - math.floor(1 + 2 * s + 0.5),
                 camX, camY, self.facing, 0, false, true)
       if s ~= 1 then
-        local fx = math.floor(self.px + 8 - camX)
+        local fx = math.floor(gx + 8 - camX)
         local fy = math.floor(ry + 12 - camY)
         love.graphics.push()
         love.graphics.translate(fx, fy)
         love.graphics.scale(s, s)
         love.graphics.translate(-fx, -fy)
       end
-      bird:draw(self.px, ry, camX, camY, self.facing, flap, false)
+      bird:draw(gx, ry, camX, camY, mountFacing, flap, false)
       if s ~= 1 then love.graphics.pop() end
       if spun then love.graphics.pop() end
     end
