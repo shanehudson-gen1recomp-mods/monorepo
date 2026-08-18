@@ -338,6 +338,19 @@ local PACKS = { "/MONSTER/m_attack.bin", "/MONSTER/monster.bin",
 local Reader = {}
 Reader.__index = Reader
 
+-- Sprite packs are NOT dex-indexed: gender-variant slots are
+-- interleaved through the list (12 of them by Gyarados, and a small
+-- reorder around Skarmory), so dex 144 read as a slot is Ditto
+-- wearing Articuno's name.  The game's own species table,
+-- /BALANCE/monster.md, carries each species' sprite slot; without it
+-- the dex is used as-is (the identity holds for a synthetic fixture).
+function Reader:spriteSlot(dex)
+  local md = self.md
+  if not md then return dex end
+  if dex < 1 or dex >= md.count then return dex end
+  return u16(md.d, 8 + dex * md.esz + 16)
+end
+
 local function packEntry(pack, dex)
   if dex < 0 or dex >= pack.count then return nil end
   local d = pack.d
@@ -356,8 +369,9 @@ end
 
 function Reader:sheet(dex, group)
   if type(group) ~= "number" then return nil end
+  local slot = self:spriteSlot(dex)
   for _, pack in ipairs(self.packs) do
-    local d = packEntry(pack, dex)
+    local d = packEntry(pack, slot)
     if d then
       local ok, sheet = pcall(function()
         return renderGroup(Wan.new(d), group)
@@ -390,7 +404,18 @@ function Rom.open(bytes)
   if #packs == 0 then
     return nil, "no /MONSTER sprite packs (not an Explorers of Sky ROM?)"
   end
-  return setmetatable({ packs = packs }, Reader)
+  local md
+  local range = nitrofsFind(bytes, "/BALANCE/monster.md")
+  if range and range[2] > range[1] and range[2] <= #bytes then
+    local d = bytes:sub(range[1] + 1, range[2])
+    local count = #d >= 8 and d:sub(1, 2) == "MD" and u32(d, 4) or 0
+    if count > 0 and count <= 8192 and #d > 8 then
+      md = { d = d, count = count,
+             esz = math.floor((#d - 8) / count) }
+      if md.esz < 18 then md = nil end
+    end
+  end
+  return setmetatable({ packs = packs, md = md }, Reader)
 end
 
 return Rom

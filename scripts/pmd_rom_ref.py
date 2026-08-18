@@ -64,12 +64,14 @@ def sheet(dex, group):
     return None
 
 
+slot = m.sprite_slots(rom, files)
+
 out = {}
 for dex in range(1, 252):
     group = anims.get(dex)
     if group is None:
         continue
-    r = sheet(dex, group)
+    r = sheet(slot(dex), group)
     if not r:
         continue
     n, durations, fw, fh, rows = r

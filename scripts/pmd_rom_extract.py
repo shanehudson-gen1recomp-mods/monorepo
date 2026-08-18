@@ -319,6 +319,30 @@ def bake_sheet(path, fw, fh, rows):
     write_png(path, w, h, grid)
 
 
+# ------- monster.md
+
+# Sprite packs are not dex-indexed (gender-variant slots interleave
+# the list); the game's species table carries each species' slot.
+def sprite_slots(rom, files):
+    entry = files.get("/BALANCE/monster.md")
+    if not entry:
+        return lambda dex: dex
+    s, e = entry
+    md = rom[s:e]
+    if md[:2] != b"MD" or len(md) <= 8:
+        return lambda dex: dex
+    count = u32(md, 4)
+    esz = (len(md) - 8) // count
+    if esz < 18:
+        return lambda dex: dex
+
+    def slot(dex):
+        if dex < 1 or dex >= count:
+            return dex
+        return u16(md, 8 + dex * esz + 16)
+    return slot
+
+
 # ------- driver
 
 
@@ -343,13 +367,14 @@ def main():
 
     (ROOT / "sprites").mkdir(parents=True, exist_ok=True)
     (ROOT / "data").mkdir(parents=True, exist_ok=True)
+    slot = sprite_slots(rom, files)
     rows_lua, baked = [], 0
     for dex in range(1, max_dex + 1):
         got = None
         for name, group in AIR_GROUPS:
             if group is None:
                 continue
-            d = pack_entry("/MONSTER/m_attack.bin", dex)
+            d = pack_entry("/MONSTER/m_attack.bin", slot(dex))
             if not d:
                 continue
             try:

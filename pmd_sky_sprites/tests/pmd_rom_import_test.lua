@@ -35,10 +35,14 @@ local function buf()
 end
 
 -- dexes whose data/anims.lua rows point at group 4: Spearow's Hover
--- and Pidgeotto's FlapAround (whose row also carries the flap subset)
-local HOVER_DEX, FLAP_DEX = 21, 17
+-- and Pidgeotto's FlapAround (whose row also carries the flap subset).
+-- The fixture's monster.md maps BOTH to sprite slot 33, off their dex
+-- on purpose: sprite packs are not dex-indexed (the Articuno-in-
+-- Ditto's-feathers bug), and this proves the mapping is honored.
+local HOVER_DEX, FLAP_DEX, WAN_SLOT = 21, 17, 33
 local DUR_A, DUR_B = 3, 5
-local ENTRIES = 22
+local ENTRIES = 34
+local MD_COUNT = 24
 
 local function buildWan()
   local base = 16  -- SIR0 header
@@ -88,25 +92,38 @@ local function buildRom()
   local wanOff = 8 + ENTRIES * 8
   local p = buf()
   p:pad(4); p:u32(ENTRIES)
-  for dex = 0, ENTRIES - 1 do
-    if dex == HOVER_DEX or dex == FLAP_DEX then
-      p:u32(wanOff); p:u32(#wan)
+  for slot = 0, ENTRIES - 1 do
+    if slot == WAN_SLOT then p:u32(wanOff); p:u32(#wan)
     else p:u32(0); p:u32(0) end
   end
   p:bytes(wan)
   local pack = p:str()
 
+  local md = buf()
+  md:bytes("MD"); md:pad(2); md:u32(MD_COUNT)
+  for i = 0, MD_COUNT - 1 do                    -- 68-byte entries,
+    md:pad(16)                                  -- sprite slot at +16
+    md:u16((i == HOVER_DEX or i == FLAP_DEX) and WAN_SLOT or i)
+    md:pad(50)
+  end
+  local mdBlob = md:str()
+
+  local packAt, mdAt = 0xE0, 0xE0 + #pack
   local r = buf()
   r:pad(0x40)
-  r:u32(0x50); r:u32(41); r:u32(0xA0); r:u32(8)         -- FNT / FAT
-  r:u32(16); r:u16(0); r:u16(0)                         -- root dir entry
-  r:u32(27); r:u16(0); r:u16(0)                         -- MONSTER entry
-  r:u8(0x87); r:bytes("MONSTER"); r:u16(0xF001); r:u8(0)
+  r:u32(0x50); r:u32(71); r:u32(0xD0); r:u32(16)        -- FNT / FAT
+  r:u32(24); r:u16(0); r:u16(0)                         -- root dir entry
+  r:u32(45); r:u16(0); r:u16(0)                         -- MONSTER entry
+  r:u32(59); r:u16(1); r:u16(0)                         -- BALANCE entry
+  r:u8(0x87); r:bytes("MONSTER"); r:u16(0xF001)
+  r:u8(0x87); r:bytes("BALANCE"); r:u16(0xF002); r:u8(0)
   r:u8(12); r:bytes("m_attack.bin"); r:u8(0)
-  r:pad(0xA0 - r.len)
-  r:u32(0xB0); r:u32(0xB0 + #pack)
-  r:pad(8)
+  r:u8(10); r:bytes("monster.md"); r:u8(0)
+  r:pad(0xD0 - r.len)
+  r:u32(packAt); r:u32(packAt + #pack)                  -- file 0
+  r:u32(mdAt); r:u32(mdAt + #mdBlob)                    -- file 1
   r:bytes(pack)
+  r:bytes(mdBlob)
   return r:str()
 end
 
@@ -119,8 +136,10 @@ T.check(Rom.open("not a rom") == nil, "junk bytes answer nil")
 
 local reader = Rom.open(rom)
 T.check(reader ~= nil, "fixture ROM opens")
+T.eq(reader:spriteSlot(HOVER_DEX), WAN_SLOT,
+  "monster.md maps the dex to its sprite slot")
 local sheet = reader:sheet(HOVER_DEX, 4)
-T.check(sheet ~= nil, "fixture dex parses")
+T.check(sheet ~= nil, "fixture dex parses through the slot mapping")
 T.eq(sheet.frames, 2, "two frames")
 T.eq(sheet.durations[1], DUR_A, "first duration")
 T.eq(sheet.durations[2], DUR_B, "second duration")

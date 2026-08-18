@@ -11,6 +11,12 @@
   (on by default) gates the cartridge rung and takes effect live.
 - The reader is verified byte-identical to the offline extractor on a
   real ROM by scripts/pmd_rom_ref.py + scripts/pmd_rom_verify.lua.
+- Species map to sprite-pack slots through the game's own species
+  table (/BALANCE/monster.md), not by dex: gender-variant slots
+  interleave the packs (12 of them by Gyarados, plus a reorder around
+  Skarmory), so dex-as-slot dressed Articuno in Ditto's art and
+  Aerodactyl in Gyarados'. Both the in-game reader and the offline
+  extractor read the table; a fixture monster.md pins the mapping.
 - PX decompression fixed against SkyTemple's spec: two of the nine
   control-flag nibble patterns decoded one too high, corrupting the
   occasional metaframe index and animation timing.
