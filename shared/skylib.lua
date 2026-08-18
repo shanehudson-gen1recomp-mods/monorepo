@@ -237,6 +237,65 @@ local sourceCache = {}
 -- caller that only ever says "left" loses nothing.
 Sky.PMD_ROWS = { down = 0, downright = 1, right = 2, upright = 3,
                  up = 4, upleft = 5, left = 6, downleft = 7 }
+Sky.ROW_NAMES = { "down", "downright", "right", "upright",
+                  "up", "upleft", "left", "downleft" }  -- [row + 1]
+
+-- The 45-degree row a screen-space heading (radians, +y down) points
+-- at.  Sticky when the caller hands back its previous answer: the
+-- heading must cross 8 degrees past the sector boundary to change
+-- rows, so a flyer riding a boundary never strobes between rows.
+local SECTOR = math.pi / 4
+local STICKY = SECTOR / 2 + math.rad(8)
+
+function Sky.headingRow(heading, currentRow)
+  if type(heading) ~= "number" then return currentRow end
+  if currentRow then
+    local center = (2 - currentRow) * SECTOR
+    local diff = (heading - center + math.pi) % (2 * math.pi) - math.pi
+    if math.abs(diff) <= STICKY then return currentRow end
+  end
+  local row = 2 - math.floor(heading / SECTOR + 0.5)
+  return row % 8
+end
+
+-- A per-entity facing that sweeps one 45-degree notch at a time
+-- toward the target (a facing name or row number), the way a PMD
+-- creature banks through a turn instead of snapping across the
+-- compass.  State lives on the entity, so a species' shared renderer
+-- never mixes two flyers' turns.  `now` is injectable for tests.
+local TURN_NOTCH = 0.05  -- seconds per 45 degrees
+
+function Sky.smoothFacing(entity, target, now)
+  local targetRow = type(target) == "number" and target
+    or Sky.PMD_ROWS[target]
+  if not (entity and targetRow) then return target end
+  now = now or (love and love.timer and love.timer.getTime
+    and love.timer.getTime()) or 0
+  local row = entity.__skyFacingRow
+  if row == nil or row == targetRow then
+    entity.__skyFacingRow = targetRow
+    entity.__skyFacingT = now
+    return Sky.ROW_NAMES[targetRow + 1]
+  end
+  while row ~= targetRow
+      and now - (entity.__skyFacingT or 0) >= TURN_NOTCH do
+    local diff = (targetRow - row + 4) % 8 - 4
+    row = (row + (diff > 0 and 1 or -1)) % 8
+    entity.__skyFacingT = (entity.__skyFacingT or now) + TURN_NOTCH
+  end
+  if row == targetRow then entity.__skyFacingT = now end
+  entity.__skyFacingRow = row
+  return Sky.ROW_NAMES[row + 1]
+end
+
+-- both of the above in one call, for callers that steer by heading:
+-- pick the (sticky) row the heading points at, then sweep toward it
+function Sky.headingFacing(entity, heading, fallback)
+  if not entity or type(heading) ~= "number" then return fallback end
+  local target = Sky.headingRow(heading, entity.__skyHeadingRow)
+  entity.__skyHeadingRow = target
+  return Sky.smoothFacing(entity, target) or fallback
+end
 
 -- frame from the def's own PMD durations (1/60s units), walked on the
 -- shared clock so every flyer of a species flaps in its own rhythm.
@@ -329,6 +388,8 @@ local function borrowedSprite(data, species, dex, seedPrefix)
             renderer.skySource = tostring(source.mod or source.id)
             if (def.directions or 0) == 8 then
               renderer.draw = directionalDraw(renderer, def)
+              -- callers steer 8-way art by true heading (Sky.headingFacing)
+              renderer.directional = true
             end
           end
           sourceCache[key] = okR and renderer or false
@@ -1100,7 +1161,9 @@ end
 -- flap rate.  Returns rotation (radians) and a vertical scale.
 function Sky.flightTransform(f)
   if f.mode == "ground" then return 0, 1 end
-  local dir = f.facing == "left" and -1 or 1
+  -- leftish facings (left and both left diagonals) mirror the lean
+  local dir = (type(f.facing) == "string" and f.facing:find("left"))
+    and -1 or 1
   local angle = ((f.__skyBank or 0) + (f.__skyPitch or 0)) * dir
   local squash = 1 - 0.05 * (0.5 + 0.5 * math.sin((f.t or 0)
     * (f.flap or 6) * math.pi))

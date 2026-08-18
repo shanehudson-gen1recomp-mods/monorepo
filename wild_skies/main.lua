@@ -1106,6 +1106,11 @@ return function(mod)
                           5 * s * size, 2 * s * size)
     love.graphics.setColor(1, 1, 1, 1)
     local facing = self.facing or (self.vx < 0 and "left" or "right")
+    -- 8-row art flies its true heading: diagonals get their own rows,
+    -- and turns sweep a notch at a time instead of snapping
+    if self.sprite and self.sprite.directional then
+      facing = Sky.headingFacing(self, self.heading, facing)
+    end
     local sy = math.floor(self.py - lift + 0.5)
     local angle, squash = 0, 1
     if mod.options:get("motion") then
@@ -1139,9 +1144,12 @@ return function(mod)
   -- can billboard a flyer without knowing what it is; the lift is baked
   -- into the returned y
   function Flyer:pose()
+    local facing = self.facing or (self.vx < 0 and "left" or "right")
+    if self.sprite and self.sprite.directional then
+      facing = Sky.headingFacing(self, self.heading, facing)
+    end
     return self.sprite, self.px, self.py - visualLift(self),
-           self.facing or (self.vx < 0 and "left" or "right"),
-           flapPhase(self), false, false
+           facing, flapPhase(self), false, false
   end
 
   local function isTownMap(mapId)
