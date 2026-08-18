@@ -17,14 +17,15 @@
   Skarmory), so dex-as-slot dressed Articuno in Ditto's art and
   Aerodactyl in Gyarados'. Both the in-game reader and the offline
   extractor read the table; a fixture monster.md pins the mapping.
-- Voxel overworlds (the Dramatic Shape family, Battle Art) show the
-  creature instead of a corner sliver of its sheet: every def carries
-  a 16x16 card of the down-facing first frame (ROM sheets bake theirs
-  straight from the parsed pixels), square and bottom-anchored so the
-  silhouette keeps its aspect; the shared resolver swaps it in as the
-  def's image AND frame box for the card-window consumers (they size
-  the card by the frame box, so a sheet-sized box drew the creature
-  at a sixth scale), and the directional draw keeps the whole sheet.
+- Voxel overworlds (the Dramatic Shape family, Battle Art) treat PMD
+  figures like vanilla cast members: each def bakes a classic walker
+  strip (six 16px cells, stand and walk for down/up/left, in the
+  engine's own layout) from its sheet -- ROM sheets straight from the
+  parsed pixels -- and the shared resolver swaps it in as the def's
+  image, frame box and walker flag. Facing works, the flap animates
+  on the walk phase, and the figure stands tile-sized beside the
+  player instead of billboarding as a sliver of one big frame. The
+  2D directional draw keeps the whole sheet, untouched.
 - PX decompression fixed against SkyTemple's spec: two of the nine
   control-flag nibble patterns decoded one too high, corrupting the
   occasional metaframe index and animation timing.

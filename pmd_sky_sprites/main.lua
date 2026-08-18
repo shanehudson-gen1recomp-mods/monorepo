@@ -108,50 +108,47 @@ return function(mod)
     return rel
   end
 
-  -- A 16x16 card of the down-facing first frame, for voxel worlds
-  -- that cut a hard-coded 16x16 window from def.image (the shared
-  -- resolver swaps it in as the def's image; the sheet itself keeps
-  -- serving the directional draw).  ROM sheets never exist as files,
-  -- so the card bakes here, straight from the parsed pixels.
-  local function bakeRomCard(dex, sheet)
+  -- A classic walker strip for voxel worlds, baked straight from the
+  -- parsed ROM pixels (the sheets never exist as files): six 16px
+  -- cells in the engine's own layout -- stand down/up/left, walk
+  -- down/up/left -- mirroring skylib's bakeWalkerStrip exactly, so
+  -- the shared resolver can swap it in as the def's image and a voxel
+  -- pipeline treats the mount like any vanilla figure: facing works,
+  -- the flap animates, tile-sized beside the player.
+  local STRIP_ROWS = { 1, 5, 7 }  -- sheet.rows: down, up, left
+  local function bakeRomCard(dex, sheet, subset)
     if not (love and love.image and love.image.newImageData
             and love.graphics and love.graphics.newImage) then
       return nil
     end
-    local okD, id = pcall(love.image.newImageData, 16, 16)
+    local okD, id = pcall(love.image.newImageData, 16, 96)
     if not (okD and id and id.setPixel) then return nil end
-    local fw, fh = sheet.fw, sheet.fh
-    local pal, canvas = sheet.palette, sheet.rows[1][1]
-    -- square and bottom-anchored, so the silhouette keeps its aspect
+    local fw, fh, pal = sheet.fw, sheet.fh, sheet.palette
+    local fa = (type(subset) == "table" and subset[1]) or 1
+    local fb = (type(subset) == "table" and subset[2])
+      or math.max(2, math.floor(sheet.frames / 2 + 1))
+    fb = math.min(fb, sheet.frames)
     local side = math.max(fw, fh)
     local rx = -math.floor((side - fw) / 2)
     local ry = fh - side
-    local step = side / 16
     local okP = pcall(function()
-      for ty = 0, 15 do
-        for tx = 0, 15 do
-          local x0, y0 = math.floor(tx * step), math.floor(ty * step)
-          local x1 = math.max(x0, math.ceil((tx + 1) * step) - 1)
-          local y1 = math.max(y0, math.ceil((ty + 1) * step) - 1)
-          local rs, gs, bs, hit, n = 0, 0, 0, 0, 0
-          for y = y0, y1 do
-            for x = x0, x1 do
-              local cx, cy = rx + x, ry + y
-              local v = cx >= 0 and cy >= 0 and cx < fw and cy < fh
-                and canvas[cy * fw + cx + 1] or nil
-              if v then
-                local c = pal[v + 1]
-                rs, gs, bs = rs + c[1], gs + c[2], bs + c[3]
-                hit = hit + 1
-              end
-              n = n + 1
+      for cell = 0, 5 do
+        local canvas = sheet.rows[STRIP_ROWS[cell % 3 + 1]]
+          [cell < 3 and fa or fb]
+        for ty = 0, 15 do
+          for tx = 0, 15 do
+            -- nearest sample keeps the pixel art crisp
+            local sx = rx + math.floor((tx + 0.5) * side / 16)
+            local sy = ry + math.floor((ty + 0.5) * side / 16)
+            local v = sx >= 0 and sy >= 0 and sx < fw and sy < fh
+              and canvas[sy * fw + sx + 1] or nil
+            if v then
+              local c = pal[v + 1]
+              id:setPixel(tx, cell * 16 + ty,
+                c[1] / 255, c[2] / 255, c[3] / 255, 1)
+            else
+              id:setPixel(tx, cell * 16 + ty, 0, 0, 0, 0)
             end
-          end
-          if n > 0 and hit / n >= 0.25 then
-            id:setPixel(tx, ty, rs / hit / 255, gs / hit / 255,
-              bs / hit / 255, 1)
-          else
-            id:setPixel(tx, ty, 0, 0, 0, 0)
           end
         end
       end
@@ -212,7 +209,7 @@ return function(mod)
     if not path then return nil end
     romRecs[dex] = {
       path = path, anim = a.anim, subset = a.subset,
-      card = bakeRomCard(dex, sheet),
+      card = bakeRomCard(dex, sheet, a.subset),
       fw = sheet.fw, fh = sheet.fh,
       frames = sheet.frames, durations = sheet.durations,
     }

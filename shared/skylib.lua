@@ -408,6 +408,64 @@ local function bakeCardRegion(id, rx, ry, w, h, rel, threshold)
   return img, rel
 end
 
+-- A classic walker strip baked from a directional sheet: six 16px
+-- cells stacked vertically in the engine's own layout
+-- (SpriteRenderer.STAND/WALK: stand down/up/left, walk down/up/left;
+-- right is the builder's mirror).  Voxel pipelines then treat the
+-- figure like any vanilla cast member: facing works, the flap
+-- animates on the walk phase, and it stands tile-sized beside the
+-- player instead of shrinking to its sheet's authored scale.
+-- Nearest-neighbour sampling keeps the pixel art crisp; the sampled
+-- square is bottom-anchored so the silhouette keeps its aspect.
+-- pmd_sky_sprites bakes the SAME layout from raw ROM pixels
+-- (def.cardImage); the two must agree.
+local STRIP_ROWS = { 0, 4, 6 }  -- PMD sheet rows: down, up, left
+local STRIP_CELLS = 6
+
+local function flapFrames(frames, subset)
+  local a = (type(subset) == "table" and subset[1]) or 1
+  local b = (type(subset) == "table" and subset[2])
+    or math.max(2, math.floor((frames or 1) / 2 + 1))
+  return a, math.min(b, frames or 1)
+end
+
+local function bakeWalkerStrip(id, fw, fh, frames, subset, rel)
+  local okS, strip = pcall(love.image.newImageData,
+    CARD, CARD * STRIP_CELLS)
+  if not (okS and strip and strip.setPixel) then return nil end
+  local a, b = flapFrames(frames, subset)
+  local side = math.max(fw, fh)
+  local ox = -math.floor((side - fw) / 2)
+  local oy = fh - side
+  local iw, ih = id:getWidth(), id:getHeight()
+  local okP = pcall(function()
+    for cell = 0, STRIP_CELLS - 1 do
+      local row = STRIP_ROWS[cell % 3 + 1]
+      local frame = cell < 3 and a or b
+      local bx, by = (frame - 1) * fw, row * fh
+      for ty = 0, CARD - 1 do
+        for tx = 0, CARD - 1 do
+          local sx = ox + math.floor((tx + 0.5) * side / CARD)
+          local sy = oy + math.floor((ty + 0.5) * side / CARD)
+          local px, py = bx + sx, by + sy
+          local r, g, bl, al = 0, 0, 0, 0
+          if sx >= 0 and sy >= 0 and sx < fw and sy < fh
+             and px >= 0 and py >= 0 and px < iw and py < ih then
+            r, g, bl, al = id:getPixel(px, py)
+          end
+          strip:setPixel(tx, cell * CARD + ty, r, g, bl,
+            al >= 0.5 and 1 or 0)
+        end
+      end
+    end
+  end)
+  if not okP then return nil end
+  local okI, img = pcall(love.graphics.newImage, strip)
+  if not okI then return nil end
+  if not registerCard(rel, img) then return nil end
+  return img, rel
+end
+
 -- the draw for a directional sheet: row by facing, frame by the def's
 -- durations, mirroring nothing (all eight rows are authored).  When
 -- the def's image was swapped for a 16x16 card (the voxel families'
@@ -509,14 +567,11 @@ local function borrowedSprite(data, species, dex, seedPrefix)
                 local okD, idata = pcall(love.image.newImageData,
                   sheetPath)
                 if okD and idata then
-                  local fw = def.frameWidth or CARD
-                  local fh = def.frameHeight or CARD
-                  local side = math.max(fw, fh)
                   local rel = CARD_PREFIX .. "sheet_"
                     .. tostring(species):gsub("[^%w_]", "_") .. ".png"
-                  card = bakeCardRegion(idata,
-                    -math.floor((side - fw) / 2), fh - side,
-                    side, side, rel, 0.25)
+                  card = bakeWalkerStrip(idata,
+                    def.frameWidth or CARD, def.frameHeight or CARD,
+                    def.frames, def.frameSubset, rel)
                   cardPath = card and rel
                 end
               end
@@ -526,6 +581,9 @@ local function borrowedSprite(data, species, dex, seedPrefix)
                 def.sheetFrameHeight = def.frameHeight
                 def.image = cardPath
                 def.frameWidth, def.frameHeight = CARD, CARD
+                -- the strip IS a classic walker sheet now, and saying
+                -- so is what animates the flap on the walk phase
+                def.walker = true
                 renderer.image = card
               end
             end
