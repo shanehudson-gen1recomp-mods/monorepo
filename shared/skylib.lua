@@ -230,6 +230,290 @@ end
 
 local sourceCache = {}
 
+-- PMD-style directional sheets: 8 rows of frames, one row per facing,
+-- rotating clockwise from facing the camera (the SpriteCollab layout).
+-- A source def opts in with directions = 8; diagonal facings land on
+-- their own rows and the four cardinals work as they always did, so a
+-- caller that only ever says "left" loses nothing.
+Sky.PMD_ROWS = { down = 0, downright = 1, right = 2, upright = 3,
+                 up = 4, upleft = 5, left = 6, downleft = 7 }
+Sky.ROW_NAMES = { "down", "downright", "right", "upright",
+                  "up", "upleft", "left", "downleft" }  -- [row + 1]
+
+-- The engine's pose contract speaks FOUR facings, and third-party
+-- consumers (Battle Art's billboard tables, first-person yaw lookups)
+-- index by them; a diagonal name there is a nil lookup and a dead
+-- render pipeline.  Pose paths quantize through this; the true
+-- diagonal lives only in draw paths that declared they understand it.
+Sky.CARDINAL_OF = { upleft = "left", downleft = "left",
+                    upright = "right", downright = "right" }
+
+-- The 45-degree row a screen-space heading (radians, +y down) points
+-- at.  Sticky when the caller hands back its previous answer: the
+-- heading must cross 8 degrees past the sector boundary to change
+-- rows, so a flyer riding a boundary never strobes between rows.
+local SECTOR = math.pi / 4
+local STICKY = SECTOR / 2 + math.rad(8)
+
+function Sky.headingRow(heading, currentRow)
+  if type(heading) ~= "number" then return currentRow end
+  if currentRow then
+    local center = (2 - currentRow) * SECTOR
+    local diff = (heading - center + math.pi) % (2 * math.pi) - math.pi
+    if math.abs(diff) <= STICKY then return currentRow end
+  end
+  local row = 2 - math.floor(heading / SECTOR + 0.5)
+  return row % 8
+end
+
+-- A per-entity facing that sweeps one 45-degree notch at a time
+-- toward the target (a facing name or row number), the way a PMD
+-- creature banks through a turn instead of snapping across the
+-- compass.  State lives on the entity, so a species' shared renderer
+-- never mixes two flyers' turns.  `now` is injectable for tests.
+local TURN_NOTCH = 0.05  -- seconds per 45 degrees
+
+function Sky.smoothFacing(entity, target, now)
+  local targetRow = type(target) == "number" and target
+    or Sky.PMD_ROWS[target]
+  if not (entity and targetRow) then return target end
+  now = now or (love and love.timer and love.timer.getTime
+    and love.timer.getTime()) or 0
+  local row = entity.__skyFacingRow
+  if row == nil or row == targetRow then
+    entity.__skyFacingRow = targetRow
+    entity.__skyFacingT = now
+    return Sky.ROW_NAMES[targetRow + 1]
+  end
+  while row ~= targetRow
+      and now - (entity.__skyFacingT or 0) >= TURN_NOTCH do
+    local diff = (targetRow - row + 4) % 8 - 4
+    row = (row + (diff > 0 and 1 or -1)) % 8
+    entity.__skyFacingT = (entity.__skyFacingT or now) + TURN_NOTCH
+  end
+  if row == targetRow then entity.__skyFacingT = now end
+  entity.__skyFacingRow = row
+  return Sky.ROW_NAMES[row + 1]
+end
+
+-- both of the above in one call, for callers that steer by heading:
+-- pick the (sticky) row the heading points at, then sweep toward it
+function Sky.headingFacing(entity, heading, fallback)
+  if not entity or type(heading) ~= "number" then return fallback end
+  local target = Sky.headingRow(heading, entity.__skyHeadingRow)
+  entity.__skyHeadingRow = target
+  return Sky.smoothFacing(entity, target) or fallback
+end
+
+-- frame from the def's own PMD durations (1/60s units), walked on the
+-- shared clock so every flyer of a species flaps in its own rhythm.
+-- A def.frameSubset names specific columns (1-based) and cycles only
+-- those: the curated flap pulled out of an otherwise unusable sheet
+-- (FlapAround is a tumble; its first two columns are a clean flap).
+local function pmdFrame(def, t)
+  local subset = def.frameSubset
+  if type(subset) == "table" and #subset > 0 then
+    local per = def.subsetTicks or 9
+    local i = math.floor(t * 60 / per) % #subset + 1
+    return (subset[i] or 1) - 1
+  end
+  local durations = def.durations
+  local n = def.frames or 1
+  if type(durations) ~= "table" or #durations == 0 then
+    return math.floor(t * 8) % n
+  end
+  local total = 0
+  for i = 1, #durations do total = total + (durations[i] or 4) end
+  local tick = (t * 60) % math.max(1, total)
+  for i = 1, #durations do
+    tick = tick - (durations[i] or 4)
+    if tick < 0 then return (i - 1) % n end
+  end
+  return 0
+end
+
+-- ------- 16x16 cards (shared by the portrait bake below and the
+-- directional-sheet bake): voxel overworld mods draw each figure as
+-- one flat card UV-mapped to a hard-coded 16x16 window of def.image,
+-- so any def whose image is bigger than one figure needs a real 16x16
+-- image standing in.  The baked card never touches the filesystem;
+-- every consumer of def.image resolves through the engine's
+-- Assets.image choke point, so one shared wrap serves cards from
+-- memory under virtual paths.
+local CARD = 16
+local CARD_PREFIX = "sky_family/card/"
+
+local function registerCard(rel, image)
+  local okA, Assets = pcall(require, "src.render.Assets")
+  if not (okA and type(Assets) == "table"
+          and type(Assets.image) == "function") then
+    return false
+  end
+  local cards = Assets.__skyFamilyCards
+  if not cards then
+    cards = {}
+    Assets.__skyFamilyCards = cards
+    local origImage = Assets.image
+    Assets.image = function(path, ...)
+      local card = cards[path]
+      if card then return card end
+      return origImage(path, ...)
+    end
+  end
+  cards[rel] = image
+  return true
+end
+
+-- box-filter one region of an ImageData down to a registered 16x16
+-- card (alpha thresholded so the silhouette stays crisp).  The
+-- sampled region may reach outside the image: those samples read as
+-- transparent, which is how a rectangular frame keeps its aspect
+-- inside the square card (the caller passes a square, bottom-anchored
+-- region around the frame).
+local function bakeCardRegion(id, rx, ry, w, h, rel, threshold)
+  local okS, small = pcall(love.image.newImageData, CARD, CARD)
+  if not (okS and small and small.setPixel) then return nil end
+  local iw, ih = id:getWidth(), id:getHeight()
+  local sx, sy = w / CARD, h / CARD
+  local okP = pcall(function()
+    for ty = 0, CARD - 1 do
+      for tx = 0, CARD - 1 do
+        local x0, y0 = math.floor(tx * sx), math.floor(ty * sy)
+        local x1 = math.max(x0, math.ceil((tx + 1) * sx) - 1)
+        local y1 = math.max(y0, math.ceil((ty + 1) * sy) - 1)
+        local rs, gs, bs, as, n = 0, 0, 0, 0, 0
+        for y = y0, y1 do
+          for x = x0, x1 do
+            local px, py = rx + x, ry + y
+            if px >= 0 and py >= 0 and px < iw and py < ih then
+              local r, g, b, a = id:getPixel(px, py)
+              rs, gs, bs = rs + r * a, gs + g * a, bs + b * a
+              as = as + a
+            end
+            n = n + 1
+          end
+        end
+        if n > 0 and as > 0 and as / n >= (threshold or 0.35) then
+          small:setPixel(tx, ty, rs / as, gs / as, bs / as, 1)
+        else
+          small:setPixel(tx, ty, 0, 0, 0, 0)
+        end
+      end
+    end
+  end)
+  if not okP then return nil end
+  local okI, img = pcall(love.graphics.newImage, small)
+  if not okI then return nil end
+  if not registerCard(rel, img) then return nil end
+  return img, rel
+end
+
+-- A classic walker strip baked from a directional sheet: six 16px
+-- cells stacked vertically in the engine's own layout
+-- (SpriteRenderer.STAND/WALK: stand down/up/left, walk down/up/left;
+-- right is the builder's mirror).  Voxel pipelines then treat the
+-- figure like any vanilla cast member: facing works, the flap
+-- animates on the walk phase, and it stands tile-sized beside the
+-- player instead of shrinking to its sheet's authored scale.
+-- Nearest-neighbour sampling keeps the pixel art crisp; the sampled
+-- square is bottom-anchored so the silhouette keeps its aspect.
+-- pmd_sky_sprites bakes the SAME layout from raw ROM pixels
+-- (def.cardImage); the two must agree.
+local STRIP_ROWS = { 0, 4, 6 }  -- PMD sheet rows: down, up, left
+local STRIP_CELLS = 6
+
+local function flapFrames(frames, subset)
+  local a = (type(subset) == "table" and subset[1]) or 1
+  local b = (type(subset) == "table" and subset[2])
+    or math.max(2, math.floor((frames or 1) / 2 + 1))
+  return a, math.min(b, frames or 1)
+end
+
+local function bakeWalkerStrip(id, fw, fh, frames, subset, rel)
+  local okS, strip = pcall(love.image.newImageData,
+    CARD, CARD * STRIP_CELLS)
+  if not (okS and strip and strip.setPixel) then return nil end
+  local a, b = flapFrames(frames, subset)
+  local side = math.max(fw, fh)
+  local ox = -math.floor((side - fw) / 2)
+  local oy = fh - side
+  local iw, ih = id:getWidth(), id:getHeight()
+  local okP = pcall(function()
+    for cell = 0, STRIP_CELLS - 1 do
+      local row = STRIP_ROWS[cell % 3 + 1]
+      local frame = cell < 3 and a or b
+      local bx, by = (frame - 1) * fw, row * fh
+      for ty = 0, CARD - 1 do
+        for tx = 0, CARD - 1 do
+          local sx = ox + math.floor((tx + 0.5) * side / CARD)
+          local sy = oy + math.floor((ty + 0.5) * side / CARD)
+          local px, py = bx + sx, by + sy
+          local r, g, bl, al = 0, 0, 0, 0
+          if sx >= 0 and sy >= 0 and sx < fw and sy < fh
+             and px >= 0 and py >= 0 and px < iw and py < ih then
+            r, g, bl, al = id:getPixel(px, py)
+          end
+          strip:setPixel(tx, cell * CARD + ty, r, g, bl,
+            al >= 0.5 and 1 or 0)
+        end
+      end
+    end
+  end)
+  if not okP then return nil end
+  local okI, img = pcall(love.graphics.newImage, strip)
+  if not okI then return nil end
+  if not registerCard(rel, img) then return nil end
+  return img, rel
+end
+
+-- the draw for a directional sheet: row by facing, frame by the def's
+-- durations, mirroring nothing (all eight rows are authored).  When
+-- the def's image was swapped for a 16x16 card (the voxel families'
+-- sake), sheetPath still names the real sheet, resolved through the
+-- same Assets.image choke point that serves virtual paths.
+local function directionalDraw(renderer, def, sheetPath)
+  local quads = {}
+  local rows = def.rows or Sky.PMD_ROWS
+  -- captured now: the def's frame box gets swapped to the 16x16 card
+  -- after this factory runs, and the sheet geometry must survive that
+  local fw, fh = def.frameWidth, def.frameHeight
+  local sheet
+  return function(self, px, py, camX, camY, facing, walkPhase)
+    if sheet == nil and sheetPath then
+      local okA, Assets = pcall(require, "src.render.Assets")
+      local okI, img = pcall(function() return Assets.image(sheetPath) end)
+      sheet = (okA and okI and img) or false
+    end
+    local image = sheet or (self.resolveImage and self:resolveImage())
+      or self.image
+    if not image then return end
+    local row = rows[facing] or rows.down or 0
+    local frame = pmdFrame(def, (love.timer and love.timer.getTime
+      and love.timer.getTime() or 0) + (self.pmdPhase or 0))
+    local key = row * 64 + frame
+    local quad = quads[key]
+    if not quad then
+      local okQ, q = pcall(love.graphics.newQuad,
+        frame * fw, row * fh, fw, fh,
+        image:getWidth(), image:getHeight())
+      if not okQ then return end
+      quad = q
+      quads[key] = quad
+    end
+    -- feet on the standard anchor (px + 8, py + 12).  PMD art is drawn
+    -- 24px to the tile against the GB's 16, and each species' size is
+    -- authored INTO its sheet, so one constant 2/3 scale carries the
+    -- whole roster over honestly -- big stays big, small stays small
+    local k = 2 / 3
+    local fx = px + 8 - camX
+    local fy = py + 12 - camY
+    love.graphics.draw(image, quad,
+      math.floor(fx - fw * k / 2),
+      math.floor(fy - fh * k),
+      0, k, k)
+  end
+end
+
 local function borrowedSprite(data, species, dex, seedPrefix)
   local okG, Game = pcall(require, "src.core.Game")
   Game = okG and Game or nil
@@ -256,6 +540,53 @@ local function borrowedSprite(data, species, dex, seedPrefix)
           end
           if okR and renderer then
             renderer.skySource = tostring(source.mod or source.id)
+            if (def.directions or 0) == 8 then
+              -- voxel families cut a 16x16 window from def.image and
+              -- size it by the def's frame box, so a sheet def shows
+              -- a sliver of one big frame at the wrong scale.  A
+              -- 16x16 card of the down-facing first frame stands in
+              -- as the def's image AND frame box; the directional
+              -- draw, wired first, keeps the real sheet geometry.  A
+              -- source can hand a pre-baked card (def.cardImage, e.g.
+              -- ROM sheets that never exist as files); otherwise one
+              -- bakes here from the sheet file, square and
+              -- bottom-anchored so the silhouette keeps its aspect.
+              local sheetPath = def.image
+              renderer.draw = directionalDraw(renderer, def, sheetPath)
+              -- callers steer 8-way art by true heading (Sky.headingFacing)
+              renderer.directional = true
+              local card, cardPath
+              if def.cardImage then
+                cardPath = def.cardImage
+                local okA, Assets = pcall(require, "src.render.Assets")
+                if okA and type(Assets) == "table" and Assets.image then
+                  local okI, img = pcall(Assets.image, cardPath)
+                  if okI then card = img end
+                end
+              else
+                local okD, idata = pcall(love.image.newImageData,
+                  sheetPath)
+                if okD and idata then
+                  local rel = CARD_PREFIX .. "sheet_"
+                    .. tostring(species):gsub("[^%w_]", "_") .. ".png"
+                  card = bakeWalkerStrip(idata,
+                    def.frameWidth or CARD, def.frameHeight or CARD,
+                    def.frames, def.frameSubset, rel)
+                  cardPath = card and rel
+                end
+              end
+              if card and cardPath then
+                def.sheetImage = sheetPath
+                def.sheetFrameWidth = def.frameWidth
+                def.sheetFrameHeight = def.frameHeight
+                def.image = cardPath
+                def.frameWidth, def.frameHeight = CARD, CARD
+                -- the strip IS a classic walker sheet now, and saying
+                -- so is what animates the flap on the walk phase
+                def.walker = true
+                renderer.image = card
+              end
+            end
           end
           sourceCache[key] = okR and renderer or false
         end
@@ -314,63 +645,10 @@ local picCache = {}
 -- there serves our cards from memory under virtual paths and hands
 -- every other path straight on.  One wrap and one registry are shared
 -- by every sky-family mod's copy of this library.
-local CARD = 16
-local CARD_PREFIX = "sky_family/card/"
-
-local function registerCard(rel, image)
-  local okA, Assets = pcall(require, "src.render.Assets")
-  if not (okA and type(Assets) == "table"
-          and type(Assets.image) == "function") then
-    return false
-  end
-  local cards = Assets.__skyFamilyCards
-  if not cards then
-    cards = {}
-    Assets.__skyFamilyCards = cards
-    local origImage = Assets.image
-    Assets.image = function(path, ...)
-      local card = cards[path]
-      if card then return card end
-      return origImage(path, ...)
-    end
-  end
-  cards[rel] = image
-  return true
-end
-
 local function bakeCardPic(id, size, w, h, species)
-  local okS, small = pcall(love.image.newImageData, CARD, CARD)
-  if not (okS and small and small.setPixel) then return nil end
-  local step = size / CARD
-  local okP = pcall(function()
-    for ty = 0, CARD - 1 do
-      for tx = 0, CARD - 1 do
-        local x0, y0 = math.floor(tx * step), math.floor(ty * step)
-        local x1 = math.max(x0, math.ceil((tx + 1) * step) - 1)
-        local y1 = math.max(y0, math.ceil((ty + 1) * step) - 1)
-        local rs, gs, bs, as, n = 0, 0, 0, 0, 0
-        for y = y0, math.min(y1, h - 1) do
-          for x = x0, math.min(x1, w - 1) do
-            local r, g, b, a = id:getPixel(x, y)
-            rs, gs, bs = rs + r * a, gs + g * a, bs + b * a
-            as, n = as + a, n + 1
-          end
-        end
-        if n > 0 and as / n >= 0.35 then
-          small:setPixel(tx, ty, rs / as, gs / as, bs / as, 1)
-        else
-          small:setPixel(tx, ty, 0, 0, 0, 0)
-        end
-      end
-    end
-  end)
-  if not okP then return nil end
-  local okI, img = pcall(love.graphics.newImage, small)
-  if not okI then return nil end
   local rel = CARD_PREFIX .. tostring(species):gsub("[^%w_]", "_")
     .. ".png"
-  if not registerCard(rel, img) then return nil end
-  return img, rel
+  return bakeCardRegion(id, 0, 0, w, h, rel)
 end
 
 local function goldPicRenderer(data, species, seedPrefix)
@@ -623,7 +901,11 @@ end
 -- the dex scale: their geometry is a crop box, not a size statement.
 function Sky.trueSized(renderer)
   local def = renderer and renderer.def
-  if not def or def.walker ~= true then return false end
+  if not def then return false end
+  -- a directional (PMD) sheet authors each species' size into its
+  -- frames; scaling it again by dex height would double it
+  if (def.directions or 0) == 8 then return true end
+  if def.walker ~= true then return false end
   return (def.frameWidth or 16) ~= 16 or (def.frameHeight or 16) ~= 16
 end
 
@@ -1022,7 +1304,9 @@ end
 -- flap rate.  Returns rotation (radians) and a vertical scale.
 function Sky.flightTransform(f)
   if f.mode == "ground" then return 0, 1 end
-  local dir = f.facing == "left" and -1 or 1
+  -- leftish facings (left and both left diagonals) mirror the lean
+  local dir = (type(f.facing) == "string" and f.facing:find("left"))
+    and -1 or 1
   local angle = ((f.__skyBank or 0) + (f.__skyPitch or 0)) * dir
   local squash = 1 - 0.05 * (0.5 + 0.5 * math.sin((f.t or 0)
     * (f.flap or 6) * math.pi))

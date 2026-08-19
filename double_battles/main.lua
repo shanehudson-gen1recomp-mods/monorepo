@@ -924,7 +924,40 @@ return function(mod)
     -- the sides substrate is the engine's documented multi-battler
     -- shape; we are its first list-shaped tenant
     local origSync = battle.syncSides
+    -- lead bodies our own machinery has fielded.  A battle.player we
+    -- never met means another mod rebuilt the lead wholesale -- a
+    -- lead-choice mod's initial send-out at the intro seam, which is
+    -- an initial send-out rather than a switch and so deliberately
+    -- emits no battler_switched.  syncSides is the first call every
+    -- honest replacement makes, so the pair state re-anchors here.
+    local fielded = setmetatable({}, { __mode = "k" })
+    if battle.player then fielded[battle.player] = true end
+    if battle.player2 then fielded[battle.player2] = true end
     battle.syncSides = function(self)
+      local lead = self.player
+      if lead and lead.mon and not fielded[lead] then
+        fielded[lead] = true
+        local prev = self.sides and self.sides[1]
+          and self.sides[1].battlers[1]
+        if self.player2 and lead.mon == self.player2.mon
+           and prev and prev ~= lead and prev.mon ~= lead.mon
+           and (prev.mon.hp or 0) > 0 then
+          -- the chosen lead is the mon already fielded as the
+          -- partner: the pair swaps instead of dissolving, the old
+          -- lead stepping into the partner slot.  This only happens
+          -- before the player send-out, so both anchors restamp
+          -- cleanly, and the old lead gets back the participant entry
+          -- the lead mod cleared thinking it left the field.
+          self.player2 = prev
+          fielded[prev] = true
+          lead.dbAnchor = 1
+          prev.dbAnchor = 2
+          if self.participants then self.participants[prev.mon] = true end
+        else
+          lead.dbAnchor = lead.dbAnchor
+            or (prev and prev.dbAnchor) or 1
+        end
+      end
       -- invariant: one body per mon.  Any switch path we didn't wrap
       -- (vanilla's SHIFT prompt applies switches its own way) that
       -- duplicates an active mon costs the partner slot, never a crash

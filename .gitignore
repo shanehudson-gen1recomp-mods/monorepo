@@ -4,3 +4,5 @@ dist/
 */lib/shared/
 # local dev scratchpad, not published
 docs/
+# the player's own cartridge dump, read in-game by pmd_sky_sprites
+*.nds

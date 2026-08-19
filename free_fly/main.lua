@@ -316,7 +316,15 @@ return function(mod)
     -- Thick voxel characters need more clearance than flat billboards or the
     -- mount's body hides the trainer completely.  This ghost exists only in
     -- pipeline rendering; the flat path composes its own seated rider.
+    -- Airborne, p.sprite IS the mount renderer: a PMD mount's seat
+    -- rises with its drawn height, so the trainer clears a legendary's
+    -- back the same way it clears a Pidgey's.
     local clearance = 12
+    local mdef = p.sprite and p.sprite.def
+    local mfh = mdef and (mdef.sheetFrameHeight or mdef.frameHeight)
+    if mdef and (mdef.directions or 0) == 8 and mfh then
+      clearance = math.max(12, math.floor(mfh * (2 / 3) * 0.5))
+    end
     -- always the WALKING sheet: while airborne p.sprite is the mount
     return p.freeFlyWalkSprite or p.sprite, p.px, p.py - lift - clearance,
            p.facing, 0, false, false
@@ -489,7 +497,17 @@ return function(mod)
   end)
 
   mod.hooks:wrap("movement.speed", function(next, frames, ctx)
-    if flying() then return math.min(frames, flyFrames()) end
+    if flying() then
+      local f = math.min(frames, flyFrames())
+      -- a zigzag cell advances only one axis, so an uncompensated
+      -- diagonal flies ~30% slower than a straight line; shorter
+      -- steps while zigzagging make a diagonal tile cost the same
+      -- time it does in PMD itself
+      if state.diagStepping then
+        f = math.max(1, math.floor(f * 0.707 + 0.5))
+      end
+      return f
+    end
     return next(frames, ctx)
   end)
 
@@ -1673,6 +1691,105 @@ return function(mod)
       end
     end
 
+    -- ------- diagonal flight (directional mounts)
+    -- The engine's step movement is four-way.  A mount whose sheet
+    -- carries all eight facing rows (a PMD sprite source) unlocks
+    -- diagonals: with two directions held, the input the engine sees
+    -- alternates axes each cell, so the path zigzags cell by cell --
+    -- which at flight speed reads as a straight diagonal -- while the
+    -- pose faces the true diagonal row the whole way.
+    local function mountDirectional()
+      local m = Player.__freeFlyMount
+      local def = m and m.def
+      return def ~= nil and (def.directions or 0) == 8
+    end
+    if Game.input and not Game.input.__freeFlyDiagWrapped then
+      Game.input.__freeFlyDiagWrapped = true
+      Game.input.__freeFlyRawIsDown = Game.input.isDown
+      Game.input.isDown = function(self, key)
+        local drop = Game.input.__freeFlyDiagDrop
+        if drop and drop[key] then return false end
+        return Game.input.__freeFlyRawIsDown(self, key)
+      end
+    end
+    local DROP_HORIZONTAL = { left = true, right = true }
+    local DROP_VERTICAL = { up = true, down = true }
+    -- the glide's catch-up rate: 1 - exp(-15 * dt) matches the old
+    -- per-tick 0.22 at 60fps, but holds the same trailing distance at
+    -- any frame rate
+    local GLIDE_RATE = 15
+    -- after the diagonal ends the glide eases back onto the stepped
+    -- position instead of snapping (the old nil-out popped the mount
+    -- and the camera up to half a cell in one frame)
+    local function easeGlide(p, dt)
+      if not state.smoothX then return end
+      local k = 1 - math.exp(-GLIDE_RATE * (dt or 1 / 60))
+      state.smoothX = state.smoothX + (p.px - state.smoothX) * k
+      state.smoothY = state.smoothY + (p.py - state.smoothY) * k
+      if not state.diag
+         and math.abs(p.px - state.smoothX) < 0.5
+         and math.abs(p.py - state.smoothY) < 0.5 then
+        state.smoothX, state.smoothY = nil, nil
+      end
+    end
+    -- rolling from two held directions to one passes through
+    -- single-key frames; the diagonal LOOK (facing, glide) holds for
+    -- a beat so a sloppy corner does not flicker, while the input
+    -- drop releases immediately so movement never stalls
+    local DIAG_GRACE = 0.08
+    local function updateDiagonal(p, dt)
+      if not (Game.input and Game.input.__freeFlyRawIsDown) then return end
+      if not (p and p.freeFlying and mountDirectional()) then
+        state.diag, state.diagCell, state.diagGrace = nil, nil, nil
+        state.diagStepping = nil
+        state.smoothX, state.smoothY = nil, nil
+        Game.input.__freeFlyDiagDrop = nil
+        return
+      end
+      local raw = Game.input.__freeFlyRawIsDown
+      local u = raw(Game.input, "up")
+      local d = raw(Game.input, "down")
+      local l = raw(Game.input, "left")
+      local r = raw(Game.input, "right")
+      local diag = (u and l and "upleft") or (u and r and "upright")
+        or (d and l and "downleft") or (d and r and "downright")
+      if not diag and state.diag and (u or d or l or r)
+         and (state.diagGrace or 0) < DIAG_GRACE then
+        state.diagGrace = (state.diagGrace or 0) + (dt or 1 / 60)
+        diag = state.diag
+      elseif diag then
+        state.diagGrace = 0
+      end
+      state.diag = diag
+      state.diagStepping = nil
+      if not diag then
+        state.diagCell, state.diagGrace = nil, nil
+        Game.input.__freeFlyDiagDrop = nil
+        easeGlide(p, dt)
+        return
+      end
+      if state.diagGrace and state.diagGrace > 0 then
+        -- grace: the look holds, the engine gets the full input back
+        Game.input.__freeFlyDiagDrop = nil
+        easeGlide(p, dt)
+        return
+      end
+      local cell = tostring(p.cellX) .. ":" .. tostring(p.cellY)
+      if state.diagCell ~= cell then
+        state.diagCell = cell
+        state.diagVert = not state.diagVert
+      end
+      Game.input.__freeFlyDiagDrop = state.diagVert and DROP_HORIZONTAL
+        or DROP_VERTICAL
+      state.diagStepping = true
+      -- the drawn mount and the camera glide the diagonal while the
+      -- cells staircase beneath (see the pose and the camera follow)
+      if not state.smoothX then
+        state.smoothX, state.smoothY = p.px, p.py
+      end
+      easeGlide(p, dt)
+    end
+
     OC.__freeFlyTick = function(ow, dt)
       -- the shared wrap is mid-frame through an older leftover wrap:
       -- the outermost runs this tick once when the frame unwinds
@@ -1685,6 +1802,7 @@ return function(mod)
       if ensurePF then ensurePF() end
       local p = ow.player
       if not p then return end
+      updateDiagonal(p, dt)
       if not Sky.goldWorld(ow) then
         pcall(dressWrappedFollower, Game, ow)
       end
@@ -2053,10 +2171,19 @@ return function(mod)
       -- flight state; the shared math does the leaning
       local HEADINGS = { right = 0, down = math.pi / 2,
                          left = math.pi, up = -math.pi / 2 }
+      -- a zigzag cell alternates p.facing between the two held axes;
+      -- the attitude must see the steady diagonal instead, or the
+      -- bank whips its sign every cell and the mount reads as
+      -- flapping in a frenzy
+      local DIAG_HEADINGS = { downright = math.pi / 4,
+                              downleft = 3 * math.pi / 4,
+                              upleft = -3 * math.pi / 4,
+                              upright = -math.pi / 4 }
       state.motion = state.motion or { flap = 8 }
-      state.motion.heading = HEADINGS[p.facing] or 0
+      state.motion.heading = (state.diag and DIAG_HEADINGS[state.diag])
+        or HEADINGS[p.facing] or 0
       state.motion.alt = state.alt
-      state.motion.facing = p.facing
+      state.motion.facing = state.diag or p.facing
       state.motion.mode = flying() and "roam" or "ground"
       state.motion.t = (state.motion.t or 0) + dt
       Sky.flightAttitude(state.motion, dt)
@@ -2118,7 +2245,11 @@ return function(mod)
         camLift = state.alt
       end
       if not Sky.goldWorld(ow) then
-        ow.camera:follow(p.px, p.py - camLift,
+        local cfx, cfy = p.px, p.py
+        if state.smoothX then
+          cfx, cfy = state.smoothX, state.smoothY
+        end
+        ow.camera:follow(cfx, cfy - camLift,
                          Game.renderer:worldViewSize())
       end
       -- Stadium 2's Gold voxel worlds read this render-only lift for
@@ -2490,6 +2621,12 @@ return function(mod)
       local sprite, px, py, facing, phase, flip, hopping = origPose(self)
       local lift = self.freeFlyAlt
       if lift and lift > 0 then
+        if state.smoothX then
+          -- the smoothed glide: drawn on the diagonal while the cells
+          -- staircase beneath, and easing back after it ends
+          -- (see updateDiagonal)
+          px, py = state.smoothX, state.smoothY
+        end
         py = py - math.floor(lift + 0.5)
         local mount = Player.__freeFlyMount or Player.__freeFlyBird
         if mount then
@@ -2497,6 +2634,17 @@ return function(mod)
           phase = math.floor(love.timer.getTime()
                              * (self.freeFlyFlapRate or 8)) % 2
           flip = false
+          -- the sweep keeps the turn state warm, but the pose
+          -- contract is the engine's four-way: a diagonal name here
+          -- nil-crashes third-party pipelines with four-frame facing
+          -- tables (Battle Art's billboards).  The stable cardinal of
+          -- the diagonal also beats the raw p.facing, which the
+          -- zigzag alternates between axes every cell.  The flat draw
+          -- keeps the true diagonal row.
+          if (mount.def and (mount.def.directions or 0)) == 8 then
+            local swept = Sky.smoothFacing(self, state.diag or facing)
+            facing = Sky.CARDINAL_OF[swept] or swept or facing
+          end
         end
       end
       return sprite, px, py, facing, phase, flip, hopping
@@ -2511,6 +2659,12 @@ return function(mod)
       if not (lift and lift > 0 and bird) then
         return origDraw(self, camX, camY)
       end
+      -- while the glide exists, the whole composite (shadow, rider,
+      -- mount, transform anchors) draws on it, so the diagonal reads
+      -- as one steady line at cruise speed instead of cells zipping
+      -- along alternating axes under a gliding camera
+      local gx, gy = self.px, self.py
+      if state.smoothX then gx, gy = state.smoothX, state.smoothY end
       -- the shadow shrinks with height and turns green over landable
       -- ground, so B-to-land reads at a glance; it stays flat below
       -- the attitude transform
@@ -2521,7 +2675,7 @@ return function(mod)
       end
       local s = (Player.__freeFlyMountScale or 1) * sizeMult()
       local r = math.max(3, 7 - lift / 16) * s
-      love.graphics.ellipse("fill", self.px + 8 - camX, self.py + 13 - camY,
+      love.graphics.ellipse("fill", gx + 8 - camX, gy + 13 - camY,
                             r, r * 0.4)
       love.graphics.setColor(1, 1, 1, 1)
       local angle, squash = 0, 1
@@ -2530,32 +2684,50 @@ return function(mod)
       end
       local spun = angle ~= 0 or squash ~= 1
       if spun then
-        local ax = math.floor(self.px + 8 - camX)
-        local ay = math.floor(self.py - lift + 8 - camY)
+        local ax = math.floor(gx + 8 - camX)
+        local ay = math.floor(gy - lift + 8 - camY)
         love.graphics.push()
         love.graphics.translate(ax, ay)
         love.graphics.rotate(angle)
         love.graphics.scale(1, squash)
         love.graphics.translate(-ax, -ay)
       end
-      local ry = self.py - math.floor(lift + 0.5)
+      local ry = gy - math.floor(lift + 0.5)
       local flap = math.floor(love.timer.getTime()
                               * (self.freeFlyFlapRate or 8)) % 2
+      -- the mount's facing: the true diagonal while two directions are
+      -- held, swept a notch at a time; the seated rider keeps the
+      -- engine's four-way facing its own sheet expects
+      local mountFacing = self.facing
+      if (bird.def and (bird.def.directions or 0)) == 8 then
+        mountFacing = Sky.smoothFacing(self, state.diag or self.facing)
+          or self.facing
+      end
       -- rider FIRST, tucked low, then the mount over it: the mount's body
       -- hides the crop line, so the figure reads as seated behind its
       -- neck instead of a head floating above it
       local walk = self.freeFlyWalkSprite or self.sprite
-      walk:draw(self.px, ry - math.floor(1 + 2 * s + 0.5),
+      -- the saddle: classic sheets seat by a small fixed nudge, a PMD
+      -- mount by a fraction of its drawn height (frames are authored
+      -- at 24px-to-the-tile, drawn at 2/3), so the figure sits on
+      -- Articuno's back instead of its tail feathers
+      local seat = 1 + 2 * s
+      local bfh = bird.def and (bird.def.sheetFrameHeight
+        or bird.def.frameHeight)
+      if (bird.def and (bird.def.directions or 0)) == 8 and bfh then
+        seat = math.max(seat, bfh * (2 / 3) * 0.4 * s)
+      end
+      walk:draw(gx, ry - math.floor(seat + 0.5),
                 camX, camY, self.facing, 0, false, true)
       if s ~= 1 then
-        local fx = math.floor(self.px + 8 - camX)
+        local fx = math.floor(gx + 8 - camX)
         local fy = math.floor(ry + 12 - camY)
         love.graphics.push()
         love.graphics.translate(fx, fy)
         love.graphics.scale(s, s)
         love.graphics.translate(-fx, -fy)
       end
-      bird:draw(self.px, ry, camX, camY, self.facing, flap, false)
+      bird:draw(gx, ry, camX, camY, mountFacing, flap, false)
       if s ~= 1 then love.graphics.pop() end
       if spun then love.graphics.pop() end
     end
@@ -2620,6 +2792,9 @@ return function(mod)
           end
           local lift = p.freeFlyAlt
           if lift and lift > 0 then
+            if state.diag and state.smoothX then
+              px, py = state.smoothX, state.smoothY
+            end
             py = py - math.floor(lift + 0.5)
             local mount = Player.__freeFlyMount or Player.__freeFlyBird
             if mount then
@@ -2627,6 +2802,10 @@ return function(mod)
               phase = math.floor(love.timer.getTime()
                 * (p.freeFlyFlapRate or 8)) % 2
               flip = false
+              if state.diag and (mount.def
+                 and (mount.def.directions or 0)) == 8 then
+                facing = state.diag
+              end
             end
           end
           return sprite, px, py, facing, phase, flip, hop

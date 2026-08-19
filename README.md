@@ -1,9 +1,9 @@
 # gen1recomp-mods
 
-Three mods for [gen1recomp](https://github.com/bryanthaboi/gen1recomp):
-two that put Pokémon in the sky and one that makes battles two-on-one,
-plus a developer tool. Each works alone, but they're built to be used
-together.
+Four mods for [gen1recomp](https://github.com/bryanthaboi/gen1recomp):
+two that put Pokémon in the sky, one that dresses that sky in real PMD
+art, and one that makes battles two-on-one, plus a developer tool. Each
+works alone, but they're built to be used together.
 
 <p>
 <a href="https://www.loom.com/share/5867c264456040c8a37acc7e32f4c827"><img src=".github/free_fly-demo.gif" width="49%" alt="free_fly demo"></a>
@@ -33,6 +33,16 @@ battle modes. Aim your moves and balls at either foe. With wild_skies
 installed, a wild double can recruit a bird you can see flying nearby
 as the second foe.
 
+**[pmd_sky_sprites](pmd_sky_sprites/)**: wild flyers and your FLY mount
+wear species-true, 8-direction Pokémon Mystery Dungeon animation sheets
+in the air. The mod ships community-redrawn art only (PMDCollab
+SpriteCollab, CC BY-NC 4.0). For all 251 species, drop a cartridge dump
+of your own *Pokémon Mystery Dungeon: Explorers of Sky* (US) — a `.nds`
+file — into the mod's folder and the official in-air animations read
+straight off your cart while you play; nothing official ships and
+nothing is extracted to disk. Unlocks true diagonal flight on Free Fly
+mounts.
+
 **Together**: the sky wild_skies fills becomes somewhere free_fly can
 hunt. Fly into a passing Pidgey and its battle starts mid-air, with the
 species and level it spawned with. Both also play well with the
@@ -60,6 +70,7 @@ updating. Each release ships one `<mod>-<version>.zip`; grab the newest.
 | Free Fly | [`free_fly`](https://github.com/shanehudson-gen1recomp-mods/free_fly) | [Releases](https://github.com/shanehudson-gen1recomp-mods/free_fly/releases/latest) |
 | Wild Skies | [`wild_skies`](https://github.com/shanehudson-gen1recomp-mods/wild_skies) | [Releases](https://github.com/shanehudson-gen1recomp-mods/wild_skies/releases/latest) |
 | Double Battles | [`double_battles`](https://github.com/shanehudson-gen1recomp-mods/double_battles) | [Releases](https://github.com/shanehudson-gen1recomp-mods/double_battles/releases/latest) |
+| PMD Sky Sprites | [`pmd_sky_sprites`](https://github.com/shanehudson-gen1recomp-mods/pmd_sky_sprites) | [Releases](https://github.com/shanehudson-gen1recomp-mods/pmd_sky_sprites/releases/latest) |
 | Dev Hook Inspector (dev tool) | [`dev-hook-inspector`](https://github.com/shanehudson-gen1recomp-mods/dev-hook-inspector) | [Releases](https://github.com/shanehudson-gen1recomp-mods/dev-hook-inspector/releases/latest) |
 
 Then, in the game:

@@ -1,0 +1,22 @@
+{
+  "id": "pmd_sky_sprites",
+  "name": "PMD Sky Sprites",
+  "version": "0.2.0",
+  "entry": "main.lua",
+  "api": 2,
+  "games": ["gen1", "gen2"],
+  "category": "ART",
+  "priority": 200,
+  "dependencies": [],
+  "optional_dependencies": [
+    "wild_skies",
+    "free_fly"
+  ],
+  "conflicts": [],
+  "permissions": [
+    "engine_internals"
+  ],
+  "game_version": "0.0.0-dev || >=0.1.0 <2.0.0",
+  "description": "Wild flyers and your FLY mount wear species-true, 8-direction PMD animation sheets in the air. Ships community art only (PMDCollab SpriteCollab, CC BY-NC 4.0, credits included), which covers a small roster. For full coverage of all 251 species, supply your own game: drop a cartridge dump of Pokemon Mystery Dungeon: Explorers of Sky (US) - a .nds file - into this mod's folder and the official in-air animations are read straight off your cart while you play. In memory only: nothing official ships with the mod and nothing is extracted to disk. The IMPORT PMD setting turns cartridge reading off.",
+  "github": "shanehudson-gen1recomp-mods/pmd_sky_sprites"
+}

@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.12.0
+
+- Flyers with 8-row PMD art now fly their true heading: diagonal
+  travel wears the diagonal rows (previously the dominant axis picked
+  a cardinal), with sticky sector boundaries so a flyer riding a
+  45-degree line never strobes. Facing changes sweep one 45-degree
+  notch at a time (shared skylib's headingFacing/smoothFacing), so
+  turns bank through the compass instead of snapping. Flyer pose
+  keeps the engine's four-way contract (the swept row quantizes to
+  its stable cardinal there), so third-party pipelines that index
+  four-frame facing tables never see a diagonal name.
+
+## 1.11.0
+
+- The shared sky resolver grew a directional rung: a sprite source can
+  answer with a PMD-style sheet (8 facing rows, per-frame durations)
+  and flyers wear it with true diagonal facings. PMD Sky Sprites is
+  the first such source. Sources answering the classic shapes are
+  untouched.
+
+
 ## 1.10.2
 
 - Fixes voxel overworlds (the Dramatic Shape family: DS, Dramaless,
