@@ -1,7 +1,7 @@
 {
   "id": "free_fly",
   "name": "Free Fly",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "entry": "main.lua",
   "api": 2,
   "games": ["gen1", "gen2"],

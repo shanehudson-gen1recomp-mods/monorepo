@@ -1186,8 +1186,32 @@ end
 -- fires every composed frame (battles and menus included), and cannot
 -- be amputated by a foreign snapshot restore, so it heals strictly
 -- better than the draw wrap it replaces.
+-- The engine's Player:update does bare arithmetic on cellX/cellY every
+-- moving frame, so a player whose cell got cleared by some other mod
+-- (a landing or free-move path that wrote nil, a warp that lost its
+-- coordinates) hard-crashes the game a frame later.  Put the player
+-- back on the cell under its pixel position, grounded, before the
+-- engine runs; returns true when a repair happened so the caller can
+-- log it once.  Pure so the tests drive it directly.
+function Sky.healPlayerCell(p)
+  if type(p) ~= "table" then return false end
+  if p.cellX ~= nil and p.cellY ~= nil then return false end
+  local function cellOf(px, fallback)
+    px = tonumber(px)
+    if px then return math.floor((px + 8) / 16) end
+    return tonumber(fallback) or 0
+  end
+  if p.cellX == nil then p.cellX = cellOf(p.px, p.targetX) end
+  if p.cellY == nil then p.cellY = cellOf(p.py, p.targetY) end
+  p.px, p.py = p.cellX * 16, p.cellY * 16
+  p.moving, p.progress = false, 0
+  p.targetX, p.targetY = nil, nil
+  return true
+end
+
 local composeHooked = false
 local inputHooked = false
+local healLogged = false
 function Sky.ensureUpdateWrap(OC, tickKey, hooks)
   local keys = OC.__skyTickKeys or {}
   OC.__skyTickKeys = keys
@@ -1214,6 +1238,13 @@ function Sky.ensureUpdateWrap(OC, tickKey, hooks)
       if OC.__skyTicking then
         if orig then orig(self, dt) end
         return
+      end
+      local p = type(self) == "table" and self.player
+      if p and Sky.healPlayerCell(p) and not healLogged then
+        healLogged = true
+        print(string.format(
+          "[sky] player lost its cell mid-frame; re-grounded at (%d,%d)",
+          p.cellX, p.cellY))
       end
       if orig then
         OC.__skyTicking = true

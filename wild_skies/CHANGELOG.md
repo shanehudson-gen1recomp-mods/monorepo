@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.12.1
+
+- Fixed a crash in the engine's player step (`Player.lua: attempt to
+  perform arithmetic on field 'cellX'`) when another mod cleared the
+  player's cell coordinates mid-frame. The shared overworld wrap now
+  puts the player back on the cell under its pixel position, grounded,
+  before the engine runs, and logs a `[sky]` line once so the culprit
+  can be chased. Any sky mod on this skylib or newer carries the guard,
+  whichever loaded first.
+
 ## 1.12.0
 
 - Flyers with 8-row PMD art now fly their true heading: diagonal
